@@ -7,23 +7,25 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { listSessions, createSession, deleteSession } from '@/api/sessions'
+import { useChatStore } from './chat'
 
 export interface Session {
   id: string
   name: string
   model?: string
-  created_at?: string
-  updated_at?: string
+  temperature?: number
+  max_tokens?: number
+  system_prompt?: string
+  created_at: string
+  updated_at: string
 }
 
 export const useSessionStore = defineStore('session', () => {
-  // State
   const sessions = ref<Session[]>([])
   const currentSessionId = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // Actions
   async function fetchSessions() {
     loading.value = true
     error.value = null
@@ -32,36 +34,53 @@ export const useSessionStore = defineStore('session', () => {
       sessions.value = await listSessions()
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to fetch sessions'
+      sessions.value = []
     } finally {
       loading.value = false
     }
   }
 
   async function createNewSession(params: { name?: string } = {}) {
+    loading.value = true
+    error.value = null
+
     try {
       const session = await createSession(params)
       sessions.value.unshift(session)
+      selectSession(session.id)
       return session
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to create session'
-      throw e
+      return null
+    } finally {
+      loading.value = false
     }
   }
 
-  function selectSession(sessionId: string) {
-    currentSessionId.value = sessionId
-  }
-
-  async function removeSession(sessionId: string) {
+  async function deleteSessionById(id: string) {
     try {
-      await deleteSession(sessionId)
-      sessions.value = sessions.value.filter(s => s.id !== sessionId)
+      await deleteSession(id)
+      sessions.value = sessions.value.filter(s => s.id !== id)
 
-      if (currentSessionId.value === sessionId) {
-        currentSessionId.value = null
+      if (currentSessionId.value === id) {
+        currentSessionId.value = sessions.value[0]?.id || null
+        updateChatStore()
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to delete session'
+    }
+  }
+
+  function selectSession(id: string) {
+    currentSessionId.value = id
+    updateChatStore()
+  }
+
+  function updateChatStore() {
+    const chatStore = useChatStore()
+    if (currentSessionId.value) {
+      chatStore.setCurrentSession(currentSessionId.value)
+      chatStore.clearMessages()
     }
   }
 
@@ -72,7 +91,7 @@ export const useSessionStore = defineStore('session', () => {
     error,
     fetchSessions,
     createSession: createNewSession,
+    deleteSession: deleteSessionById,
     selectSession,
-    deleteSession: removeSession,
   }
 })

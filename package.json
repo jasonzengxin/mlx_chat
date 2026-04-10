@@ -1,0 +1,17 @@
+{
+  "name": "mlx-chat",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:backend": "cd backend && pytest tests/ -v",
+    "test:frontend": "cd frontend && npm run test",
+    "test:all": "npm run test:backend && npm run test:frontend",
+    "test:e2e": "playwright test",
+    "dev:backend": "cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.41.0"
+  }
+}

@@ -1,8 +1,8 @@
 /**
  * Chat API
- *
- * 聊天相关 API 调用
  */
+
+import { getAuthHeaders } from './auth'
 
 export interface ChatParams {
   session_id: string
@@ -21,7 +21,7 @@ export interface CompletionParams {
 }
 
 /**
- * 流式聊天
+ * Stream chat response from backend
  */
 export async function streamingChat(
   params: ChatParams,
@@ -29,9 +29,7 @@ export async function streamingChat(
 ): Promise<void> {
   const response = await fetch('/api/v1/chat', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(params),
   })
 
@@ -64,7 +62,7 @@ export async function streamingChat(
             throw new Error(data.error)
           }
         } catch {
-          // 忽略解析错误
+          // Ignore parse errors
         }
       }
     }
@@ -72,17 +70,15 @@ export async function streamingChat(
 }
 
 /**
- * OpenAI 兼容格式聊天
+ * OpenAI compatible streaming chat
  */
 export async function streamingChatCompletions(
   params: CompletionParams,
   onDelta: (content: string) => void
 ): Promise<void> {
-  const response = await fetch('/api/v1/chat/completions', {
+  const response = await fetch('/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(params),
   })
 
@@ -112,7 +108,7 @@ export async function streamingChatCompletions(
             onDelta(data.choices[0].delta.content)
           }
         } catch {
-          // 忽略解析错误
+          // Ignore parse errors
         }
       }
     }

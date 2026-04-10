@@ -1,8 +1,8 @@
 /**
  * Sessions API
- *
- * 会话管理 API 调用
  */
+
+import { getAuthHeaders } from './auth'
 
 export interface Session {
   id: string
@@ -22,7 +22,9 @@ export interface Session {
 }
 
 export async function listSessions(): Promise<Session[]> {
-  const response = await fetch('/api/v1/sessions')
+  const response = await fetch('/api/v1/sessions', {
+    headers: getAuthHeaders()
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to list sessions: ${response.statusText}`)
@@ -32,7 +34,9 @@ export async function listSessions(): Promise<Session[]> {
 }
 
 export async function getSession(id: string): Promise<Session> {
-  const response = await fetch(`/api/v1/sessions/${id}`)
+  const response = await fetch(`/api/v1/sessions/${id}`, {
+    headers: getAuthHeaders()
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to get session: ${response.statusText}`)
@@ -44,9 +48,7 @@ export async function getSession(id: string): Promise<Session> {
 export async function createSession(params: { name?: string }): Promise<Session> {
   const response = await fetch('/api/v1/sessions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(params),
   })
 
@@ -63,9 +65,7 @@ export async function updateSession(
 ): Promise<Session> {
   const response = await fetch(`/api/v1/sessions/${id}`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(params),
   })
 
@@ -79,6 +79,7 @@ export async function updateSession(
 export async function deleteSession(id: string): Promise<void> {
   const response = await fetch(`/api/v1/sessions/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders()
   })
 
   if (!response.ok) {

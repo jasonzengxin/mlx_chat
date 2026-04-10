@@ -7,8 +7,8 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface, supporting Ch
 ## Tech Stack
 
 - **Backend**: FastAPI + aiosqlite + mlx-lm
-- **Database**: SQLite (persistent at `backend/mlx_chat.db`)
-- **Testing**: pytest + pytest-asyncio + httpx
+- **Frontend**: Vue 3 + Vite + Pinia + TypeScript
+- **Testing**: pytest + pytest-asyncio + httpx (backend), Vitest (frontend)
 
 ## Key Patterns
 
@@ -153,17 +153,26 @@ supported_models: id, name, model_id, description, params_count, quantization, i
 ## Running Commands
 
 ```bash
-# Install dependencies
+# Backend dependencies
 pip install fastapi uvicorn aiosqlite mlx-lm pytest pytest-asyncio httpx
 
-# Run tests
+# Frontend dependencies
+cd frontend && npm install
+
+# Backend tests
 python -m pytest backend/tests/ -v
+
+# Frontend tests (Vitest)
+cd frontend && npm run test
 
 # Initialize database
 python backend/init_db.py
 
-# Start server
+# Start backend
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+
+# Start frontend
+cd frontend && npm run dev
 ```
 
 ## API Structure
@@ -183,29 +192,66 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 ## Project Rules
 
+### TDD Methodology (CRITICAL - ALWAYS FOLLOW)
+
+This project uses **Test-Driven Development (TDD)**. The workflow is:
+
+1. **Write tests FIRST** - Before implementing any feature, write failing tests
+2. **Implement the feature** - Write the minimum code to make tests pass
+3. **Refactor if needed** - Improve code while keeping tests green
+4. **All tests must pass** - Feature is only complete when tests pass
+
+**The standard for feature completion is: ALL TESTS PASS**
+
+```bash
+# ALWAYS write tests first, then implement:
+# 1. Backend: Write failing test first
+# 2. Backend: Run test, verify it fails
+# 3. Backend: Implement feature
+# 4. Backend: Run test, verify it passes
+
+# TDD Workflow Example:
+python -m pytest backend/tests/ -v  # Run tests first
+# See tests fail
+# Implement feature
+# Run tests again
+# All must pass before moving on
+```
+
 ### Testing Requirement (IMPORTANT)
 
 **Every code or database script change MUST pass all tests before completion.**
 
 ```bash
-# Run this command after ANY code change
+# Backend tests
 python -m pytest backend/tests/ -v
 
-# Expected: All 171+ tests pass
-# If tests fail: Fix the issue before proceeding
+# Frontend tests (Vitest)
+cd frontend && npm run test
+
+# Expected: ALL tests pass
+# If any test fails: Feature is NOT complete
 ```
 
-This applies to:
-- Any Python file changes (routers, services, models, etc.)
-- Database schema changes
-- Test file modifications
-- Configuration updates
+### Documentation Update Requirement (IMPORTANT)
+
+After completing any feature (when all tests pass), update documentation:
+
+1. **TDD_IMPLEMENT.md** - Update progress and mark feature as complete
+2. **CLAUDE.md** - Add new patterns if needed
+3. **README.md** - Add usage examples if needed
+
+```bash
+# Check what needs to be updated
+git status
+```
 
 ### Test Categories
 
 - **Unit tests** (`backend/tests/unit/`): Service logic, data classes
 - **API tests** (`backend/tests/api/`): HTTP endpoints, authentication
 - **Integration tests** (`backend/tests/integration/`): Real MLX model testing
+- **Frontend tests** (`frontend/src/**/*.test.ts`): Vue components, stores, API calls
 
 ## Avoid These Mistakes
 

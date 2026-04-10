@@ -39,7 +39,14 @@ mlx_chat/
 │       ├── unit/            # 单元测试
 │       ├── api/             # API 测试
 │       └── integration/     # 集成测试
-├── frontend/                 # Vue 3 前端 (待开发)
+├── frontend/                 # Vue 3 前端
+│   ├── src/
+│   │   ├── views/           # 页面视图
+│   │   ├── components/     # Vue 组件
+│   │   ├── stores/         # Pinia 状态管理
+│   │   └── api/             # API 调用
+│   ├── package.json
+│   └── vite.config.ts
 └── data/                    # 数据目录 (SQLite DB)
 ```
 
@@ -302,6 +309,45 @@ fetch(`${API_BASE}/chat/completions`, {
   })
 });
 ```
+
+## 前端开发
+
+前端使用 Vue 3 + Vite + Pinia + TypeScript。
+
+### 安装依赖
+
+```bash
+cd frontend
+npm install
+```
+
+### 启动开发服务器
+
+```bash
+# 先启动后端 (在另一个终端)
+cd backend
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# 启动前端
+cd frontend
+npm run dev
+```
+
+访问 http://localhost:3000
+
+### 构建生产版本
+
+```bash
+cd frontend
+npm run build
+```
+
+### 功能特性
+
+- **会话管理** - 创建、切换、删除对话会话
+- **模型选择** - 下拉菜单选择已注册的 MLX 模型
+- **流式输出** - SSE 实时显示 AI 响应
+- **API Key 管理** - 首次使用时输入 API Key
 
 ## 运行测试
 

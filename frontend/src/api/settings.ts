@@ -1,14 +1,14 @@
 /**
  * Settings API
- *
- * 设置管理 API 调用
  */
+
+import { getAuthHeaders } from './auth'
 
 export interface APIKey {
   id: string
   name: string
   key_prefix: string
-  key?: string // 只在创建时返回
+  key?: string
   created_at?: string
   last_used_at?: string
 }
@@ -31,7 +31,9 @@ export interface Settings {
 
 // API Keys
 export async function listApiKeys(): Promise<{ keys: APIKey[] }> {
-  const response = await fetch('/api/v1/settings/api-keys')
+  const response = await fetch('/api/v1/settings/api-keys', {
+    headers: getAuthHeaders()
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to list API keys: ${response.statusText}`)
@@ -43,9 +45,7 @@ export async function listApiKeys(): Promise<{ keys: APIKey[] }> {
 export async function createApiKey(name: string): Promise<APIKey> {
   const response = await fetch('/api/v1/settings/api-keys', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ name }),
   })
 
@@ -59,6 +59,7 @@ export async function createApiKey(name: string): Promise<APIKey> {
 export async function deleteApiKey(keyId: string): Promise<void> {
   const response = await fetch(`/api/v1/settings/api-keys/${keyId}`, {
     method: 'DELETE',
+    headers: getAuthHeaders()
   })
 
   if (!response.ok) {
@@ -70,7 +71,9 @@ export async function deleteApiKey(keyId: string): Promise<void> {
 export async function getUsage(period?: string): Promise<UsageSummary> {
   const url = period ? `/api/v1/usage?period=${period}` : '/api/v1/usage'
 
-  const response = await fetch(url)
+  const response = await fetch(url, {
+    headers: getAuthHeaders()
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to get usage: ${response.statusText}`)
@@ -81,7 +84,9 @@ export async function getUsage(period?: string): Promise<UsageSummary> {
 
 // Settings
 export async function getSettings(): Promise<Settings> {
-  const response = await fetch('/api/v1/settings')
+  const response = await fetch('/api/v1/settings', {
+    headers: getAuthHeaders()
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to get settings: ${response.statusText}`)
@@ -93,9 +98,7 @@ export async function getSettings(): Promise<Settings> {
 export async function updateSettings(settings: Partial<Settings>): Promise<void> {
   const response = await fetch('/api/v1/settings', {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(settings),
   })
 

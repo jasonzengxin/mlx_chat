@@ -1,35 +1,321 @@
 <template>
   <div class="chat-view">
-    <div class="sidebar">
-      <SessionList />
-    </div>
-    <div class="main">
-      <ChatArea />
-      <InputArea />
+    <!-- API Key Setup Modal -->
+    <transition name="fade">
+      <div v-if="!hasApiKey" class="modal-overlay">
+        <div class="modal">
+          <h2>Welcome to MLX Chat</h2>
+          <p>Enter your API key to continue</p>
+          
+          <div class="input-group">
+            <input
+              v-model="apiKeyInput"
+              type="password"
+              placeholder="sk-..."
+              @keydown.enter="setupApiKey"
+              autofocus
+            />
+            <span v-if="error" class="error-msg">{{ error }}</span>
+          </div>
+
+          <button @click="setupApiKey" class="submit-btn">
+            Continue
+          </button>
+
+          <div class="help">
+            <p>Don't have an API key?</p>
+            <code>python backend/init_db.py</code>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Main Chat UI -->
+    <div v-if="hasApiKey" class="main-ui-wrapper">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h1 class="logo">MLX Chat</h1>
+          <router-link to="/settings" class="settings-link" title="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          </router-link>
+        </div>
+        <ModelSelector />
+        <div class="sidebar-content">
+          <SessionList />
+        </div>
+        <div class="sidebar-footer">
+          <div class="user-info">
+            <div class="avatar">U</div>
+            <span>User</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-container">
+        <header class="chat-header" v-if="currentSessionName">
+          <div class="session-info">
+            <span class="session-name">{{ currentSessionName }}</span>
+          </div>
+        </header>
+        <div class="chat-content">
+          <ChatArea />
+        </div>
+        <footer class="chat-footer">
+          <InputArea />
+        </footer>
+      </main>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { hasApiKey as checkApiKey, setApiKey } from '@/api/auth'
+import { useSessionStore } from '@/stores/session'
+import ModelSelector from '@/components/ModelSelector.vue'
 import SessionList from '@/components/SessionList.vue'
 import ChatArea from '@/components/ChatArea.vue'
 import InputArea from '@/components/InputArea.vue'
+
+const sessionStore = useSessionStore()
+const apiKeyInput = ref('')
+const error = ref('')
+const hasApiKey = ref(false)
+
+const currentSessionName = computed(() => {
+  const session = sessionStore.sessions.find(s => s.id === sessionStore.currentSessionId)
+  return session ? session.name : null
+})
+
+onMounted(() => {
+  hasApiKey.value = checkApiKey()
+})
+
+function setupApiKey() {
+  if (!apiKeyInput.value.trim()) {
+    error.value = 'Please enter an API key'
+    return
+  }
+  setApiKey(apiKeyInput.value.trim())
+  hasApiKey.value = true
+  error.value = ''
+}
 </script>
 
 <style scoped>
 .chat-view {
   display: flex;
   height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg-primary);
 }
 
+.main-ui-wrapper {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+/* Modal Styling */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: var(--bg-secondary);
+  padding: 2.5rem;
+  border-radius: var(--radius-xl);
+  max-width: 440px;
+  width: 90%;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+}
+
+.modal h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.modal p {
+  margin-bottom: 2rem;
+  color: var(--text-secondary);
+}
+
+.input-group {
+  margin-bottom: 1.5rem;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.error-msg {
+  color: var(--error);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  display: block;
+}
+
+.submit-btn {
+  width: 100%;
+  padding: 0.875rem;
+  background-color: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submit-btn:hover {
+  background-color: var(--accent-hover);
+}
+
+.help {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.help p {
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.help code {
+  background-color: var(--bg-tertiary);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+  font-size: 0.875rem;
+  color: var(--accent);
+}
+
+/* Sidebar Styling */
 .sidebar {
-  width: 280px;
+  width: 300px;
   background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
 }
 
-.main {
+.sidebar-header {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.settings-link {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.settings-link:hover {
+  color: var(--text-primary);
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
+}
+
+/* Main Container Styling */
+.main-container {
   flex: 1;
   display: flex;
   flex-direction: column;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.chat-header {
+  height: 64px;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.session-name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.chat-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-footer {
+  padding: 0 1.5rem 1.5rem;
 }
 </style>
