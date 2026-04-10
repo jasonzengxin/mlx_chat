@@ -23,6 +23,7 @@ class CreateSessionRequest(BaseModel):
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 4096
     system_prompt: Optional[str] = ""
+    context_messages: Optional[int] = 20
 
 
 class UpdateSessionRequest(BaseModel):
@@ -32,6 +33,7 @@ class UpdateSessionRequest(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     system_prompt: Optional[str] = None
+    context_messages: Optional[int] = None
 
 
 def get_session_service(request: Request) -> SessionService:
@@ -55,7 +57,8 @@ async def create_session(
         model=request_body.model or "default",
         temperature=request_body.temperature,
         max_tokens=request_body.max_tokens,
-        system_prompt=request_body.system_prompt
+        system_prompt=request_body.system_prompt,
+        context_messages=request_body.context_messages,
     )
 
     return session
@@ -113,6 +116,8 @@ async def update_session(
         update_data["max_tokens"] = request_body.max_tokens
     if request_body.system_prompt is not None:
         update_data["system_prompt"] = request_body.system_prompt
+    if request_body.context_messages is not None:
+        update_data["context_messages"] = request_body.context_messages
 
     session = await session_service.update_session(
         session_id,

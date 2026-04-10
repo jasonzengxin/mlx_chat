@@ -70,6 +70,7 @@ async def db_connection():
             temperature REAL DEFAULT 0.7,
             max_tokens INTEGER DEFAULT 4096,
             system_prompt TEXT DEFAULT '',
+            context_messages INTEGER DEFAULT 20,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (api_key_id) REFERENCES api_keys(id)

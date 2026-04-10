@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { listSessions, createSession, deleteSession, getSession } from '@/api/sessions'
+import { listSessions, createSession, deleteSession, getSession, updateSession } from '@/api/sessions'
 import { useChatStore } from './chat'
 
 export interface Session {
@@ -16,6 +16,7 @@ export interface Session {
   temperature?: number
   max_tokens?: number
   system_prompt?: string
+  context_messages?: number
   created_at: string
   updated_at: string
 }
@@ -99,12 +100,30 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function updateSessionById(id: string, params: Partial<Session>) {
+    try {
+      const updated = await updateSession(id, params)
+      const idx = sessions.value.findIndex(s => s.id === id)
+      if (idx !== -1) {
+        sessions.value[idx] = { ...sessions.value[idx], ...updated }
+      }
+      return updated
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to update session'
+      return null
+    }
+  }
+
   function updateChatStore() {
     const chatStore = useChatStore()
     if (currentSessionId.value) {
       chatStore.setCurrentSession(currentSessionId.value)
       chatStore.clearMessages()
     }
+  }
+
+  function getCurrentSession(): Session | undefined {
+    return sessions.value.find(s => s.id === currentSessionId.value)
   }
 
   return {
@@ -116,5 +135,7 @@ export const useSessionStore = defineStore('session', () => {
     createSession: createNewSession,
     deleteSession: deleteSessionById,
     selectSession,
+    updateSession: updateSessionById,
+    getCurrentSession,
   }
 })

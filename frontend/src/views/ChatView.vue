@@ -56,6 +56,26 @@
           <div class="session-info">
             <span class="session-name">{{ currentSessionName }}</span>
           </div>
+          <div class="header-actions">
+            <div class="context-control">
+              <label class="context-label" title="Number of historical messages sent to the model per request (0 = no history, -1 = all)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>Context</span>
+              </label>
+              <select
+                class="context-select"
+                :value="currentContextMessages"
+                @change="onContextChange"
+              >
+                <option :value="0">None</option>
+                <option :value="4">4</option>
+                <option :value="10">10</option>
+                <option :value="20">20</option>
+                <option :value="40">40</option>
+                <option :value="-1">All</option>
+              </select>
+            </div>
+          </div>
         </header>
         <div class="chat-content">
           <ChatArea />
@@ -83,9 +103,22 @@ const error = ref('')
 const hasApiKey = ref(false)
 
 const currentSessionName = computed(() => {
-  const session = sessionStore.sessions.find(s => s.id === sessionStore.currentSessionId)
+  const session = sessionStore.getCurrentSession()
   return session ? session.name : null
 })
+
+const currentContextMessages = computed(() => {
+  const session = sessionStore.getCurrentSession()
+  return session?.context_messages ?? 20
+})
+
+function onContextChange(e: Event) {
+  const val = Number((e.target as HTMLSelectElement).value)
+  const session = sessionStore.getCurrentSession()
+  if (session) {
+    sessionStore.updateSession(session.id, { context_messages: val } as any)
+  }
+}
 
 onMounted(() => {
   hasApiKey.value = checkApiKey()
@@ -306,6 +339,49 @@ function setupApiKey() {
   font-weight: 600;
   font-size: 1rem;
   color: var(--text-primary);
+}
+
+.chat-header {
+  justify-content: space-between;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.context-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.context-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.context-select {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.context-select:hover,
+.context-select:focus {
+  border-color: var(--accent);
 }
 
 .chat-content {

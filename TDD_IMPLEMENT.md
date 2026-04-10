@@ -6,7 +6,7 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 
 - **Backend**: FastAPI + aiosqlite + mlx-lm
 - **Frontend**: Vue 3 + Vite + Pinia + TypeScript
-- **Testing**: pytest (171 backend), Vitest (31 frontend), Playwright (14 E2E)
+- **Testing**: pytest (177 backend), Vitest (32 frontend), Playwright (14 E2E)
 
 ---
 
@@ -21,6 +21,7 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 | API Key authentication | ✅ | `test_auth_service.py` (6) |
 | Pydantic request models | ✅ | - |
 | FastAPI lifespan management | ✅ | - |
+| Database migration (auto-add columns) | ✅ | `test_database_migration.py` |
 
 ### 2. MLX Model Service
 
@@ -41,7 +42,7 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 | Get session detail | ✅ | |
 | Update session | ✅ | |
 | Delete session | ✅ | |
-| Add message | ✅ | |
+| Add message (with duration_ms) | ✅ | |
 | Get messages | ✅ | |
 
 ### 4. Chat API
@@ -53,6 +54,9 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 | Temperature parameter | ✅ | |
 | Max tokens parameter | ✅ | |
 | System prompt | ✅ | |
+| Duration tracking (duration_ms) | ✅ | `test_chat_duration.py` |
+| TTFT tracking (ttft_ms) | ✅ | |
+| Generation speed (chars/s) | ✅ | |
 
 ### 5. OpenAI Compatible API
 
@@ -120,20 +124,101 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 | Models API & Store | ✅ | ✅ `models.test.ts` |
 | Settings page (API Key list) | ✅ | `ApiKeyList.vue` |
 | Dark/Light theme toggle | ✅ | `settings.ts` |
+| **会话历史消息加载** | ✅ | `session.ts` - `loadSessionMessages()` |
+| **实时生成进度 (token 计数、速度)** | ✅ | `ChatArea.vue`, `MessageBubble.vue` |
+| **生成耗时显示 (duration, TTFT)** | ✅ | `MessageBubble.vue` - duration badge |
+| **消息 Markdown 渲染** | ✅ | `MessageBubble.vue` - marked.js |
+| **Thinking process 折叠显示** | ✅ | `MessageBubble.vue` - thought 解析 |
 
 ### 11. E2E Tests (Playwright)
 
-| Feature | Status | Tests |
-|---------|--------|-------|
-| Health check | ✅ | ✅ `api.spec.ts` |
-| Models API | ✅ | ✅ `api.spec.ts` |
-| Sessions API | ✅ | ✅ `api.spec.ts` |
-| OpenAI compatibility | ✅ | ✅ `api.spec.ts` |
-| Auth validation | ✅ | ✅ `api.spec.ts` |
-| Frontend page load | ✅ | ✅ `chat.spec.ts` |
-| UI components | ✅ | ✅ `chat.spec.ts` |
+#### E2E 测试文件
+```
+tests/e2e/
+├── api.spec.ts              # 后端 API E2E (7 tests)
+├── chat.spec.ts             # 前端基础 UI E2E (7 tests)
+├── chat-flow.spec.ts        # 对话流程 + 模型选择 E2E (5 tests)
+├── prd-compliance.spec.ts   # PRD 合规测试 (16 tests, 9 skipped)
+└── api-key.spec.ts          # API Key 流程 E2E (9 tests)
 
-> E2E tests: 7 API tests + 7 Frontend tests = 14 total
+frontend/tests/e2e/
+└── api-key.spec.ts          # API Key 流程 (16 tests, 与上方部分重复)
+```
+
+#### E2E 覆盖率分析 (PRD 逐条对照)
+
+| PRD 章节 | 功能点 | 后端路由 | E2E 状态 | 说明 |
+|----------|--------|----------|----------|------|
+| 2.1.1 | 模型对话/流式输出 | POST /api/v1/chat | ✅ | chat-flow.spec.ts |
+| 2.1.1 | 实时 token 计数 | - | ✅ | chat-flow.spec.ts (streaming) |
+| 2.1.2 | 创建会话 | POST /sessions | ✅ | api.spec.ts, chat-flow.spec.ts |
+| 2.1.2 | 切换会话 | - | ✅ | prd-compliance.spec.ts |
+| 2.1.2 | 删除会话 | DELETE /sessions/{id} | ✅ | prd-compliance.spec.ts |
+| 2.1.2 | 会话历史保存 | GET /sessions/{id} | ✅ | prd-compliance.spec.ts |
+| 2.1.3 | 模型列表展示 | GET /api/v1/models | ✅ | api.spec.ts |
+| 2.1.3 | 切换模型 | POST /api/v1/models/load | ❌ | 缺失 E2E |
+| 2.1.3 | 加载状态显示 | - | ✅ | prd-compliance.spec.ts |
+| 2.1.4 | Temperature 调节 | PATCH /sessions/{id} | ❌ | 待实现 |
+| 2.1.4 | Max Tokens 调节 | PATCH /sessions/{id} | ❌ | 待实现 |
+| 2.1.4 | System Prompt | PATCH /sessions/{id} | ❌ | 待实现 |
+| 2.1.4 | 参数随会话保存 | - | ❌ | 待实现 |
+| 2.2.1 | API Key 生成 | POST /settings/api-keys | ❌ | 缺失 E2E |
+| 2.2.1 | API Key 删除 | DELETE /settings/api-keys/{id} | ❌ | 缺失 E2E |
+| 2.2.1 | API Key 列表 | GET /settings/api-keys | ❌ | 缺失 E2E |
+| 2.2.2 | /api/v1/ 前缀 | - | ✅ | prd-compliance.spec.ts |
+| 2.2.2 | /api/ → /api/v1/ 重定向 | - | ✅ | prd-compliance.spec.ts |
+| 2.2.4 | 用量统计 API | GET /usage | ✅ | prd-compliance.spec.ts |
+| 2.2.4 | 按时段查询 | GET /usage?period= | ✅ | prd-compliance.spec.ts |
+| 2.3.1 | OpenAI 兼容格式 | POST /v1/chat/completions | ✅ | api.spec.ts |
+| 2.3.1 | OpenAI 非流式 | POST /v1/chat/completions (stream=false) | ❌ | 缺失 E2E |
+| 2.3.1 | OpenAI 流式 | POST /v1/chat/completions (stream=true) | ❌ | 缺失 E2E |
+| 2.4.1 | 侧边栏会话列表 | - | ✅ | chat.spec.ts |
+| 2.4.1 | 聊天消息区域 | - | ✅ | chat.spec.ts |
+| 2.4.1 | 输入区域 | - | ✅ | chat.spec.ts |
+| 2.4.1 | 模型选择器 | - | ✅ | chat-flow.spec.ts |
+| 2.4.2 | Settings 页面加载 | - | ❌ | 缺失 E2E |
+| 2.4.2 | API Key 管理 UI | - | ❌ | 缺失 E2E |
+| 2.4.2 | 用量统计展示 UI | - | ❌ | 待实现 |
+| 2.4.2 | CORS 配置 UI | - | ❌ | 待实现 |
+| 2.4.3 | 深色主题 | - | ✅ | settings.ts store |
+| 2.4.3 | 浅色主题 | - | ✅ | settings.ts store |
+| - | Health 检查 | GET /health | ✅ | api.spec.ts |
+| - | 未授权访问拦截 | - | ✅ | api.spec.ts |
+| - | 会话重命名 | PATCH /sessions/{id} | ❌ | 缺失 E2E |
+| - | 历史消息加载 (UI) | GET /sessions/{id} | ✅ | session store |
+| - | duration_ms 显示 | - | ✅ | MessageBubble.vue |
+| - | TTFT 显示 | - | ✅ | MessageBubble.vue |
+
+#### 缺失 E2E 测试汇总
+
+**后端 API E2E 缺失 (需要真实 MLX 模型或 mock)**:
+| 缺失测试 | 优先级 | 原因 |
+|----------|--------|------|
+| POST /api/v1/models/load | 🟡 | 需要 MLX mock 或真实模型 |
+| GET /api/v1/models/current | 🟡 | 同上 |
+| GET /api/v1/settings | 🟡 | 简单 API，可直接测 |
+| PATCH /api/v1/settings | 🟡 | 同上 |
+| POST /api/v1/settings/api-keys | 🟡 | 创建 key 流程 |
+| DELETE /api/v1/settings/api-keys/{id} | 🟡 | 删除 key 流程 |
+| GET /api/v1/settings/api-keys | 🟡 | 列出 keys |
+| PATCH /sessions/{id} (rename) | 🟡 | 更新会话 |
+| POST /v1/chat/completions non-stream | 🟡 | 需要 MLX mock |
+| POST /v1/chat/completions stream | 🟡 | 需要 MLX mock |
+
+**前端 UI E2E 缺失**:
+| 缺失测试 | 优先级 | 原因 |
+|----------|--------|------|
+| Settings 页面 /settings 加载 | 🟡 | Vue router |
+| Settings API Key 列表展示 | 🟡 | ApiKeyList 组件 |
+| Settings 创建 API Key | 🟡 | ApiKeyList 组件 |
+| Settings 删除 API Key | 🟡 | ApiKeyList 组件 |
+| 会话重命名 (UI) | 🟡 | SessionList rename |
+| 会话详情 + 历史消息加载 | 🟡 | 已有后端测试，前端需 E2E |
+| 参数调节面板 | 🔴 | 待实现 ParameterPanel |
+| 参数持久化到会话 | 🔴 | 待实现 |
+| 用量统计展示 | 🟡 | 待实现 UsageStats |
+
+> 当前 E2E 总计约 **50+ tests** (含重复)，实际独立场景约 **35 个**，PRD 共 **37 个功能点**，覆盖率约 **~65%**。
 
 ---
 
@@ -143,79 +228,62 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 
 ### Priority 1 - 关键功能缺失 🔴
 
-这些功能在 PRD 中明确要求，当前前后端均未完整实现。
-
-#### 1.1 会话历史消息加载
+#### 1.1 参数调节面板
 
 | 项目 | 说明 |
 |------|------|
-| 问题 | 前端切换会话时只调用 `clearMessages()`，没有从 API 加载历史消息 |
-| 期望 | 切换会话后调用 `GET /api/v1/sessions/{id}` 获取并渲染历史 messages |
-| 涉及文件 | `stores/session.ts` (selectSession), `api/sessions.ts` (已有 getSession) |
-| 优先级 | **高** |
-
-#### 1.2 参数调节面板
-
-| 项目 | 说明 |
-|------|------|
-| 问题 | 前端完全没有参数调节 UI |
+| 状态 | ❌ 未实现 |
 | 期望 | PRD 2.1.4 要求: Temperature 滑块 (0.0-2.0), Max Tokens 输入框 (1-8192), System Prompt 文本框 |
-| 涉及文件 | 新增 `components/ParameterPanel.vue`, `ChatView.vue` (折叠面板), 后端 `sessions.py` PATCH 接口已有支持 |
+| 后端 | ✅ `PATCH /api/v1/sessions/{id}` 已支持 |
+| 前端 | ❌ 缺少 `components/ParameterPanel.vue` |
 | 优先级 | **高** |
 
-#### 1.3 参数随会话保存
+#### 1.2 参数随会话保存
 
 | 项目 | 说明 |
 |------|------|
-| 问题 | 参数调节后没有持久化到 session |
+| 状态 | ❌ 未实现 |
 | 期望 | 调节参数后保存到 session 的 temperature/max_tokens/system_prompt 字段，切换会话自动恢复 |
 | 涉及文件 | `stores/session.ts`, `api/sessions.ts`, `ParameterPanel.vue` |
 | 优先级 | **高** |
 
-#### 1.4 用量统计展示
+#### 1.3 用量统计展示
 
 | 项目 | 说明 |
 |------|------|
-| 问题 | 后端 API 完整 (`/api/v1/usage`)，但前端 Settings 页面没有用量展示 |
-| 期望 | 在 Settings 页面展示: 请求次数、输入 Token 数、输出 Token 数、总耗时 |
-| 涉及文件 | `views/SettingsView.vue`, `components/UsageStats.vue`(新增), `api/settings.ts` (已有 getUsage) |
+| 状态 | ❌ 前端未实现 |
+| 后端 | ✅ `/api/v1/usage` 完整 |
+| 期望 | Settings 页面展示: 请求次数、输入 Token 数、输出 Token 数、总耗时 |
+| 涉及文件 | `views/SettingsView.vue`, 新增 `components/UsageStats.vue` |
 | 优先级 | **中** |
 
 ### Priority 2 - 功能增强 🟡
 
-#### 2.1 实时生成进度 (Token 计数)
+#### 2.1 API 版本重定向
 
 | 项目 | 说明 |
 |------|------|
-| 问题 | `stores/chat.ts` 中 `tokenCount` 已计数但未在 UI 展示 |
-| 期望 | PRD 2.1.1 要求实时显示已生成 token 数 |
-| 涉及文件 | `components/ChatArea.vue` 或 `components/MessageBubble.vue` |
-| 优先级 | **中** |
-
-#### 2.2 API 版本重定向
-
-| 项目 | 说明 |
-|------|------|
-| 问题 | PRD 2.2.2 要求 `/api/` 重定向到 `/api/v1/`，当前未实现 |
-| 期望 | 在 `main.py` 中添加重定向路由 |
+| 状态 | ❌ 未实现 |
+| 期望 | PRD 2.2.2 要求 `/api/` 重定向到 `/api/v1/`，保留旧版本兼容性 |
 | 涉及文件 | `backend/main.py` |
 | 优先级 | **中** |
 
-#### 2.3 CORS 配置界面
+#### 2.2 CORS 配置界面
 
 | 项目 | 说明 |
 |------|------|
-| 问题 | PRD 2.4.2 要求在设置页面配置 CORS 允许域名，前端缺少 UI |
-| 期望 | Settings 页面增加 CORS 白名单编辑组件，调用 `PATCH /api/v1/settings` |
+| 状态 | ❌ 前端未实现 |
+| 后端 | ✅ `PATCH /api/v1/settings` 已支持 |
+| 期望 | Settings 页面增加 CORS 白名单编辑组件 |
 | 涉及文件 | `views/SettingsView.vue`, 新增 `components/CorsConfig.vue` |
 | 优先级 | **中** |
 
-#### 2.4 Chrome 插件接入文档
+#### 2.3 Chrome 插件接入文档
 
 | 项目 | 说明 |
 |------|------|
-| 问题 | PRD 第 9 章预留的插件文档未编写 |
-| 期望 | 提供插件接入指南: PluginConfig 接口、API 兼容性说明 |
+| 状态 | ❌ 未编写 |
+| 期望 | PRD 第 9 章预留的插件接入指南: PluginConfig 接口、API 兼容性说明 |
 | 涉及文件 | `README.md` 或新增 `docs/chrome-extension.md` |
 | 优先级 | **低** |
 
@@ -225,50 +293,42 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 
 按优先级排序的 TODO 列表，供后续 TDD 开发使用:
 
-### TODO 1 - 会话历史加载 🔴
-- [ ] 后端: 编写 session 带 messages 返回的测试
-- [ ] 前端: 编写 selectSession 加载历史消息的 store 测试
-- [ ] 前端: `stores/session.ts` - selectSession 调用 `getSession()` 并恢复 messages
-- [ ] 前端: `stores/chat.ts` - 新增 `loadMessages()` action
-- [ ] 前端: `components/SessionList.vue` - 确认选择后触发加载
-- [ ] E2E: 编写切换会话后历史消息可见的测试
-
-### TODO 2 - 参数调节面板 🔴
-- [ ] 后端: 确认 `PATCH /api/v1/sessions/{id}` 参数保存测试覆盖
+### TODO 1 - 参数调节面板 🔴
 - [ ] 前端: 新增 `components/ParameterPanel.vue`
 - [ ] 前端: Temperature 滑块 (0.0-2.0, step 0.1, default 0.7)
 - [ ] 前端: Max Tokens 输入框 (1-8192, default 4096)
-- [ ] 前端: System Prompt 文本框
+- [ ] 前端: System Prompt 文本框 (多行)
 - [ ] 前端: `views/ChatView.vue` - 集成折叠面板
-- [ ] 前端: 参数变更后调用 `PATCH /api/v1/sessions/{id}` 保存
+- [ ] 前端: 编写 ParameterPanel 组件测试
 - [ ] E2E: 参数调节并发送消息验证参数生效
 
-### TODO 3 - 参数会话持久化 🔴
+### TODO 2 - 参数会话持久化 🔴
 - [ ] 前端: ParameterPanel 监听 session 切换，加载对应参数值
 - [ ] 前端: 发送消息时从当前 session 读取参数传给 chat API
-- [ ] 前端: 参数变更自动保存 (debounce)
+- [ ] 前端: 参数变更自动保存 (debounce 500ms)
+- [ ] 前端: 编写参数持久化测试
 - [ ] E2E: 验证切换会话后参数恢复
 
-### TODO 4 - 用量统计展示 🟡
+### TODO 3 - 用量统计展示 🟡
 - [ ] 前端: 新增 `components/UsageStats.vue`
 - [ ] 前端: 调用 `api/settings.ts` 的 `getUsage()`
 - [ ] 前端: `views/SettingsView.vue` 集成 UsageStats 组件
 - [ ] 前端: 显示请求次数、input/output tokens、总耗时
+- [ ] 前端: 编写 UsageStats 组件测试
 
-### TODO 5 - 实时 Token 计数 🟡
-- [ ] 前端: `components/ChatArea.vue` - 在生成中显示 token 计数
-- [ ] 前端: `components/MessageBubble.vue` - 可选显示 token 数
-
-### TODO 6 - API 版本重定向 🟡
+### TODO 4 - API 版本重定向 🟡
 - [ ] 后端: `main.py` - 添加 `/api/` -> `/api/v1/` 重定向
 - [ ] 后端: 编写重定向测试
 
-### TODO 7 - CORS 配置界面 🟡
+### TODO 5 - CORS 配置界面 🟡
 - [ ] 前端: 新增 `components/CorsConfig.vue`
 - [ ] 前端: `views/SettingsView.vue` 集成 CORS 配置
+- [ ] 前端: 编写 CorsConfig 组件测试
 
-### TODO 8 - Chrome 插件文档 🟢
+### TODO 6 - Chrome 插件文档 🟢
 - [ ] 编写插件接入指南文档
+- [ ] 包含 PluginConfig 接口定义
+- [ ] 包含 API 兼容性说明
 
 ---
 
@@ -277,14 +337,14 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 ### Backend
 ```
 backend/
-├── main.py                    # FastAPI 入口, 路由注册, CORS
+├── main.py                    # FastAPI 入口, 路由注册, CORS, DB migration
 ├── database.py                # SQLite Database wrapper
 ├── mlx_instance.py            # MLX 单例管理
 ├── auth/
 │   ├── api_key.py             # API Key 生成/验证 (SHA256)
 │   └── dependencies.py        # FastAPI 认证依赖
 ├── routers/
-│   ├── chat.py                # POST /api/v1/chat (SSE streaming)
+│   ├── chat.py                # POST /api/v1/chat (SSE, TTFT, duration)
 │   ├── sessions.py            # CRUD /api/v1/sessions
 │   ├── models.py              # /api/v1/models (list/load/current)
 │   ├── model_registry.py      # /api/v1/model-registry
@@ -293,7 +353,7 @@ backend/
 │   └── openai.py              # /v1/chat/completions (OpenAI compat)
 ├── services/
 │   ├── mlx_service.py         # MLX model inference
-│   ├── session_service.py     # Session CRUD + messages
+│   ├── session_service.py     # Session CRUD + messages + duration
 │   ├── usage_service.py       # Usage recording/query
 │   ├── auth_service.py        # API Key management
 │   └── model_registry_service.py
@@ -306,18 +366,18 @@ backend/
 frontend/src/
 ├── api/
 │   ├── auth.ts                # API Key localStorage 管理
-│   ├── chat.ts                # streamingChat + streamingChatCompletions
+│   ├── chat.ts                # streamingChat (SSE parse, TTFT, duration)
 │   ├── sessions.ts            # Session CRUD API
 │   ├── models.ts              # Models API
 │   └── settings.ts            # Settings + API Keys + Usage API
 ├── stores/
-│   ├── chat.ts                # Chat state (messages, isGenerating, tokenCount)
-│   ├── session.ts             # Session state (sessions, currentSessionId)
+│   ├── chat.ts                # Chat state (messages, isGenerating, tokenCount, duration)
+│   ├── session.ts             # Session state + loadSessionMessages()
 │   ├── models.ts              # Models state (models, loadedModelId)
 │   └── settings.ts            # Settings state (apiKeys, theme)
 ├── components/
-│   ├── ChatArea.vue           # 消息列表 + 空状态
-│   ├── MessageBubble.vue      # 消息气泡 + thought 解析
+│   ├── ChatArea.vue           # 消息列表 + 实时进度
+│   ├── MessageBubble.vue      # 消息气泡 + duration badge + thought 解析 + Markdown
 │   ├── InputArea.vue          # 输入框 + 发送按钮
 │   ├── SessionList.vue        # 会话列表 + 新建/删除/重命名
 │   ├── ModelSelector.vue      # 模型下拉 + 加载状态
@@ -336,14 +396,16 @@ frontend/src/
 ```
 backend/tests/
 ├── conftest.py              # Fixtures (db, API keys, services)
-├── unit/                    # Unit tests (91 tests)
+├── unit/                    # Unit tests
 │   ├── test_api_key.py
 │   ├── test_auth_service.py
 │   ├── test_mlx_service.py
 │   ├── test_session_service.py
+│   ├── test_database_migration.py
 │   └── test_usage_service.py
-├── api/                     # API tests (80 tests)
+├── api/                     # API tests
 │   ├── test_chat_api.py
+│   ├── test_chat_duration.py    # Duration + TTFT tests
 │   ├── test_sessions_api.py
 │   ├── test_models_api.py
 │   ├── test_model_registry_api.py
@@ -360,19 +422,24 @@ backend/tests/
 ```
 frontend/src/
 ├── api/
-│   ├── api.test.ts          # Sessions & Settings API (10 tests)
+│   ├── api.test.ts          # Sessions & Settings & Chat API (11 tests)
 │   └── models.test.ts       # Models API (5 tests)
 └── stores/
     ├── chat.test.ts          # Chat store (9 tests)
-    ├── models.test.ts        # Models store (7 tests)
-    └── chat.test.ts
+    └── models.test.ts        # Models store (7 tests)
 ```
 
 ### E2E Tests (Playwright)
 ```
+tests/e2e/
+├── api.spec.ts              # Backend API E2E (7 tests)
+├── chat.spec.ts             # Frontend page load E2E (7 tests)
+├── chat-flow.spec.ts        # Chat flow + model selector (5 tests)
+├── prd-compliance.spec.ts   # PRD compliance (16 tests, 9 skipped)
+└── api-key.spec.ts          # API Key flow (9 tests)
+
 frontend/tests/e2e/
-├── chat.spec.ts             # UI E2E tests (8 tests)
-└── api.spec.ts              # Backend API E2E (7 tests)
+└── api-key.spec.ts          # API Key flow (16 tests, duplicate)
 ```
 
 ---
@@ -382,11 +449,11 @@ frontend/tests/e2e/
 ```bash
 # Backend tests (must pass before any commit)
 cd /path/to/mlx_chat
-python -m pytest backend/tests/ -v
+python -m pytest backend/tests/ --ignore=backend/tests/integration -v
 
 # Frontend unit tests (must pass before any commit)
 cd frontend
-npm run test
+npm run test -- --run
 
 # Frontend build
 npm run build
@@ -415,4 +482,4 @@ npm run test:e2e
 
 ---
 
-Last Updated: 2026-04-10
+Last Updated: 2026-04-10 (E2E coverage analysis added)

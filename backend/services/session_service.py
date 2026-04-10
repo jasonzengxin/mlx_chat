@@ -27,7 +27,8 @@ class SessionService:
         model: str = "default",
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        system_prompt: str = ""
+        system_prompt: str = "",
+        context_messages: int = 20,
     ) -> dict:
         """
         创建新会话
@@ -39,6 +40,7 @@ class SessionService:
             temperature: 温度参数
             max_tokens: 最大 token 数
             system_prompt: 系统提示词
+            context_messages: 发送给模型的历史消息条数 (0=无历史, -1=全部)
 
         Returns:
             dict: 会话信息
@@ -49,10 +51,10 @@ class SessionService:
         await self.db.execute(
             """
             INSERT INTO sessions
-            (id, api_key_id, name, model, temperature, max_tokens, system_prompt)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (id, api_key_id, name, model, temperature, max_tokens, system_prompt, context_messages)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, api_key_id, session_name, model, temperature, max_tokens, system_prompt)
+            (session_id, api_key_id, session_name, model, temperature, max_tokens, system_prompt, context_messages)
         )
         await self.db.commit()
 
@@ -72,7 +74,7 @@ class SessionService:
         row = await self.db.fetchone(
             """
             SELECT id, api_key_id, name, model, temperature, max_tokens,
-                   system_prompt, created_at, updated_at
+                   system_prompt, context_messages, created_at, updated_at
             FROM sessions
             WHERE id = ? AND api_key_id = ?
             """,
@@ -240,7 +242,7 @@ class SessionService:
             return None
 
         # 构建更新语句
-        allowed_fields = ["name", "model", "temperature", "max_tokens", "system_prompt"]
+        allowed_fields = ["name", "model", "temperature", "max_tokens", "system_prompt", "context_messages"]
         updates = []
         values = []
 

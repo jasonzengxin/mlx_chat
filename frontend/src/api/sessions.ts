@@ -11,6 +11,7 @@ export interface Session {
   temperature?: number
   max_tokens?: number
   system_prompt?: string
+  context_messages?: number
   messages?: Array<{
     id: string
     role: string

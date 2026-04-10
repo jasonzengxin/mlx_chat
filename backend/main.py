@@ -100,6 +100,7 @@ async def get_database() -> Database:
         );
     ''')
     await _ensure_column(conn, "messages", "duration_ms", "INTEGER")
+    await _ensure_column(conn, "sessions", "context_messages", "INTEGER DEFAULT 20")
     await conn.commit()
 
     return Database(conn)

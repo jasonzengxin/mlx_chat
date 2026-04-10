@@ -28,6 +28,7 @@ class ChatRequest(BaseModel):
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 4096
     system_prompt: Optional[str] = None
+    context_messages: Optional[int] = None
 
 
 def _safe_rate(total_units: int, duration_ms: int) -> float:
@@ -78,10 +79,24 @@ async def chat(
         raise HTTPException(status_code=404, detail="Session not found")
 
     # 获取历史消息
-    messages = await session_service.get_messages(
+    all_messages = await session_service.get_messages(
         request_body.session_id,
         api_key["id"]
     )
+
+    # 确定上下文窗口大小: 请求级 > session 级 > 默认 20
+    ctx_limit = (
+        request_body.context_messages
+        if request_body.context_messages is not None
+        else session.get("context_messages")
+    )
+    if ctx_limit is None:
+        ctx_limit = 20
+    # 0 = 不带历史; 负数 = 全部
+    if ctx_limit >= 0:
+        messages = all_messages[-ctx_limit:] if ctx_limit > 0 else []
+    else:
+        messages = all_messages
 
     start_time = time.perf_counter()
 

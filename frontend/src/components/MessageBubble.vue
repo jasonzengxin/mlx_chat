@@ -52,6 +52,16 @@
       </div>
       <div class="message-meta">
         <span>{{ message.role === 'user' ? 'You' : 'Assistant' }}</span>
+        <button
+          v-if="message.role === 'assistant' && displayContent && !isStreaming"
+          class="copy-btn"
+          :class="{ copied }"
+          @click="copyContent"
+          :title="copied ? 'Copied!' : 'Copy'"
+        >
+          <svg v-if="!copied" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </button>
         <span v-if="isStreaming" class="gen-badge">
           {{ formatElapsed(elapsedMs) }}
           <template v-if="tokenCount > 0">
@@ -97,6 +107,7 @@ const props = withDefaults(defineProps<{
 })
 
 const showThought = ref(false)
+const copied = ref(false)
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
@@ -115,6 +126,62 @@ function formatElapsed(ms: number): string {
   return `${secs}s`
 }
 
+async function copyContent() {
+  const text = displayContent.value
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  }
+}
+
+/**
+ * Detect implicit thinking blocks that lack <think> tags.
+ * Heuristic: if the text starts with CJK/reasoning-like content followed by a
+ * double-newline separator and then a clearly different answer section, split it.
+ */
+function splitImplicitThinking(text: string): { thought: string | null; content: string } {
+  const thinkPrefixes = [
+    /^嗯[，,]/,
+    /^好的[，,]/,
+    /^首先[，,]/,
+    /^让我/,
+    /^我(需要|来|先|想|觉得)/,
+    /^用户/,
+    /^这个问题/,
+    /^关于这个/,
+    /^分析一下/,
+  ]
+  const hasThinkPrefix = thinkPrefixes.some(p => p.test(text.trim()))
+  if (!hasThinkPrefix) return { thought: null, content: text }
+
+  const separators = ['\n\n---\n\n', '\n---\n', '\n\n']
+  for (const sep of separators) {
+    const idx = text.indexOf(sep)
+    if (idx > 50 && idx < text.length - 20) {
+      const before = text.substring(0, idx).trim()
+      const after = text.substring(idx + sep.length).trim()
+      const answerSignals = [/^["""「]/, /^[A-Z]/, /^\*\*/, /^#+\s/, /^[-•]\s/]
+      if (answerSignals.some(p => p.test(after))) {
+        return { thought: before, content: after }
+      }
+    }
+  }
+  return { thought: null, content: text }
+}
+
 const parsed = computed(() => {
   let text = props.message.content || ''
   let thought = null
@@ -128,22 +195,12 @@ const parsed = computed(() => {
     const startOffset = startTagIndex + 7
     thought = text.substring(startOffset, endTagIndex).trim()
     content = text.substring(endTagIndex + 8).trim()
-  } else if (text.startsWith('Thinking Process:')) {
-    const lastGapIndex = text.lastIndexOf('\n\n')
-    if (lastGapIndex !== -1 && lastGapIndex > 20) {
-      thought = text.substring(0, lastGapIndex).replace(/^Thinking Process:\s*/i, '').trim()
-      content = text.substring(lastGapIndex).trim()
-    } else {
-      const lines = text.split('\n')
-      if (lines.length > 2) {
-        content = lines.pop() || ''
-        thought = lines.join('\n').replace(/^Thinking Process:\s*/i, '').trim()
-      }
+  } else {
+    const implicit = splitImplicitThinking(text)
+    if (implicit.thought) {
+      thought = implicit.thought
+      content = implicit.content
     }
-  }
-
-  if (content.startsWith('Thinking Process:') && !thought) {
-    return { thought: null, content: text }
   }
 
   return { 
@@ -389,6 +446,36 @@ const renderedContent = computed(() => {
 .gen-badge {
   background: rgba(99, 102, 241, 0.12);
   color: var(--accent);
+}
+
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.message-wrapper:hover .copy-btn {
+  opacity: 1;
+}
+
+.copy-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.copy-btn.copied {
+  opacity: 1;
+  color: #22c55e;
 }
 
 :root[data-theme="light"] .message-meta {
