@@ -1,1 +1,0 @@
-const n="mlx_api_key";function o(){return localStorage.getItem(n)||""}function c(t){localStorage.setItem(n,t)}function i(){return!!o()}function p(){const t=o();return t?{Authorization:`Bearer ${t}`,"Content-Type":"application/json"}:{"Content-Type":"application/json"}}const u=(t,r)=>{const e=t.__vccOpts||t;for(const[a,s]of r)e[a]=s;return e};export{u as _,p as g,i as h,c as s};

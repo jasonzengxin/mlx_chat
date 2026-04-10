@@ -6,7 +6,7 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { listSessions, createSession, deleteSession } from '@/api/sessions'
+import { listSessions, createSession, deleteSession, getSession } from '@/api/sessions'
 import { useChatStore } from './chat'
 
 export interface Session {
@@ -71,9 +71,32 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  function selectSession(id: string) {
+  async function selectSession(id: string) {
     currentSessionId.value = id
-    updateChatStore()
+    await loadSessionMessages(id)
+  }
+
+  async function loadSessionMessages(sessionId: string) {
+    const chatStore = useChatStore()
+    chatStore.setCurrentSession(sessionId)
+    chatStore.clearMessages()
+
+    try {
+      const sessionData = await getSession(sessionId)
+      if (sessionData && sessionData.messages) {
+        // 将 API 返回的消息转换为 chat store 格式
+        const messages = sessionData.messages.map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: new Date(m.created_at).getTime(),
+          duration_ms: m.duration_ms
+        }))
+        chatStore.setMessages(messages)
+      }
+    } catch (e) {
+      console.error('Failed to load session messages:', e)
+    }
   }
 
   function updateChatStore() {

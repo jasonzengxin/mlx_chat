@@ -29,19 +29,11 @@
         v-for="msg in messages"
         :key="msg.id"
         :message="msg"
+        :isStreaming="store.isGenerating && msg.id === lastAssistantId"
+        :elapsedMs="store.generatingElapsedMs"
+        :tokenCount="store.tokenCount"
+        :tokPerSec="tokensPerSec"
       />
-      <div v-if="store.isGenerating" class="generating-indicator">
-        <div class="gen-row">
-          <div class="dot-typing"></div>
-          <span class="gen-stats">
-            {{ formatElapsed(store.generatingElapsedMs) }}
-            <template v-if="store.tokenCount > 0">
-              &middot; {{ store.tokenCount }} tokens
-              <template v-if="tokensPerSec > 0">&middot; {{ tokensPerSec }} tok/s</template>
-            </template>
-          </span>
-        </div>
-      </div>
       <div ref="bottom"></div>
     </div>
   </div>
@@ -57,19 +49,18 @@ const messages = computed(() => store.messages)
 const scrollContainer = ref<HTMLElement | null>(null)
 const bottom = ref<HTMLElement | null>(null)
 
+const lastAssistantId = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'assistant') return messages.value[i].id
+  }
+  return null
+})
+
 const tokensPerSec = computed(() => {
   const elapsed = store.generatingElapsedMs
   if (elapsed < 1000 || store.tokenCount < 2) return 0
   return Math.round(store.tokenCount / (elapsed / 1000) * 10) / 10
 })
-
-function formatElapsed(ms: number): string {
-  const totalSec = Math.floor(ms / 1000)
-  const mins = Math.floor(totalSec / 60)
-  const secs = totalSec % 60
-  if (mins > 0) return `${mins}:${secs.toString().padStart(2, '0')}`
-  return `${secs}s`
-}
 
 function clearError() {
   store.error = null
@@ -203,43 +194,4 @@ onMounted(() => {
   opacity: 1;
 }
 
-.generating-indicator {
-  padding: 1rem 0;
-}
-
-.gen-row {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-}
-
-.gen-stats {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.dot-typing {
-  position: relative;
-  left: -9999px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--text-secondary);
-  color: var(--text-secondary);
-  box-shadow: 9991px 0 0 0 var(--text-secondary), 9999px 0 0 0 var(--text-secondary), 10007px 0 0 0 var(--text-secondary);
-  animation: dot-typing 1.5s infinite linear;
-  margin-left: 2rem;
-}
-
-@keyframes dot-typing {
-  0% { box-shadow: 9991px 0 0 0 var(--text-secondary), 9999px 0 0 0 var(--text-secondary), 10007px 0 0 0 var(--text-secondary); }
-  16.667% { box-shadow: 9991px -6px 0 0 var(--text-secondary), 9999px 0 0 0 var(--text-secondary), 10007px 0 0 0 var(--text-secondary); }
-  33.333% { box-shadow: 9991px 0 0 0 var(--text-secondary), 9999px 0 0 0 var(--text-secondary), 10007px 0 0 0 var(--text-secondary); }
-  50% { box-shadow: 9991px 0 0 0 var(--text-secondary), 9999px -6px 0 0 var(--text-secondary), 10007px 0 0 0 var(--text-secondary); }
-  66.667% { box-shadow: 9991px 0 0 0 var(--text-secondary), 9999px 0 0 0 var(--text-secondary), 10007px 0 0 0 var(--text-secondary); }
-  83.333% { box-shadow: 9991px 0 0 0 var(--text-secondary), 9999px 0 0 0 var(--text-secondary), 10007px -6px 0 0 var(--text-secondary); }
-  100% { box-shadow: 9991px 0 0 0 var(--text-secondary), 9999px 0 0 0 var(--text-secondary), 10007px 0 0 0 var(--text-secondary); }
-}
 </style>

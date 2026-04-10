@@ -81,6 +81,7 @@ async def db_connection():
             session_id TEXT NOT NULL,
             role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
             content TEXT NOT NULL,
+            duration_ms INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
         );

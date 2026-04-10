@@ -23,10 +23,15 @@ export interface CompletionParams {
 /**
  * Stream chat response from backend
  */
+export interface StreamingResult {
+  durationMs: number
+  totalTokens: number
+}
+
 export async function streamingChat(
   params: ChatParams,
   onToken: (token: string) => void
-): Promise<void> {
+): Promise<StreamingResult> {
   const response = await fetch('/api/v1/chat', {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -44,6 +49,9 @@ export async function streamingChat(
     throw new Error('No response body')
   }
 
+  let durationMs = 0
+  let totalTokens = 0
+
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -58,6 +66,12 @@ export async function streamingChat(
           if (data.token) {
             onToken(data.token)
           }
+          if (data.total_tokens !== undefined) {
+            totalTokens = data.total_tokens
+          }
+          if (data.duration_ms !== undefined) {
+            durationMs = data.duration_ms
+          }
           if (data.error) {
             throw new Error(data.error)
           }
@@ -67,6 +81,8 @@ export async function streamingChat(
       }
     }
   }
+
+  return { durationMs, totalTokens }
 }
 
 /**

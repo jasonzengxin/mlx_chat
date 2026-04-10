@@ -14,6 +14,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  duration_ms?: number
 }
 
 export const useChatStore = defineStore('chat', () => {
@@ -77,10 +78,9 @@ export const useChatStore = defineStore('chat', () => {
 
       let accumulatedContent = ''
 
-      await streamingChat(params, (token) => {
+      const result = await streamingChat(params, (token) => {
         accumulatedContent += token
         tokenCount.value++
-        // Force reactivity by creating a new array
         const msgIndex = messages.value.findIndex(m => m.id === assistantMessage.id)
         if (msgIndex !== -1) {
           messages.value = messages.value.map((m, i) =>
@@ -88,6 +88,14 @@ export const useChatStore = defineStore('chat', () => {
           )
         }
       })
+
+      const durationMs = result?.durationMs ?? generatingElapsedMs.value
+      const msgIndex = messages.value.findIndex(m => m.id === assistantMessage.id)
+      if (msgIndex !== -1) {
+        messages.value = messages.value.map((m, i) =>
+          i === msgIndex ? { ...m, duration_ms: durationMs } : m
+        )
+      }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error'
       // Remove the empty assistant message on error
@@ -100,6 +108,10 @@ export const useChatStore = defineStore('chat', () => {
   function clearMessages() {
     messages.value = []
     tokenCount.value = 0
+  }
+
+  function setMessages(msgs: Message[]) {
+    messages.value = msgs
   }
 
   function setCurrentSession(sessionId: string) {
@@ -115,6 +127,7 @@ export const useChatStore = defineStore('chat', () => {
     error,
     sendMessage,
     clearMessages,
+    setMessages,
     setCurrentSession,
   }
 })

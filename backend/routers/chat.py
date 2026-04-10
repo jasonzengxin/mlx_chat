@@ -101,12 +101,16 @@ async def chat(
                 full_response += token
                 yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
 
-            # 保存助手消息
+            # 计算生成耗时
+            duration_ms = int((time.time() - start_time) * 1000)
+
+            # 保存助手消息 (包含耗时)
             await session_service.add_message(
                 request_body.session_id,
                 api_key["id"],
                 "assistant",
-                full_response
+                full_response,
+                duration_ms=duration_ms
             )
 
             # 记录用量
@@ -120,7 +124,7 @@ async def chat(
                 time_ms=elapsed
             ))
 
-            yield f"event: done\ndata: {json.dumps({'total_tokens': len(full_response)})}\n\n"
+            yield f"event: done\ndata: {json.dumps({'total_tokens': len(full_response), 'duration_ms': duration_ms})}\n\n"
 
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"

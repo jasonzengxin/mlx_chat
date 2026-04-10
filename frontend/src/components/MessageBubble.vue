@@ -27,16 +27,39 @@
           </transition>
         </div>
 
+        <!-- Waiting / Thinking State (no content yet) -->
+        <div v-if="isStreaming && !parsed.content" class="thinking-state">
+          <div class="thinking-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="thinking-label">Thinking...</div>
+        </div>
+
         <!-- Main Answer Content -->
         <div
-          v-if="message.role === 'assistant'"
+          v-else-if="message.role === 'assistant'"
           class="content markdown-body"
           v-html="renderedContent"
         ></div>
         <div v-else class="content content-plain">{{ parsed.content }}</div>
+
+        <!-- Streaming cursor -->
+        <span v-if="isStreaming && parsed.content" class="streaming-cursor"></span>
       </div>
       <div class="message-meta">
-        {{ message.role === 'user' ? 'You' : 'Assistant' }}
+        <span>{{ message.role === 'user' ? 'You' : 'Assistant' }}</span>
+        <span v-if="isStreaming" class="gen-badge">
+          {{ formatElapsed(elapsedMs) }}
+          <template v-if="tokenCount > 0">
+            &middot; {{ tokenCount }} tokens
+          </template>
+          <template v-if="tokPerSec > 0">
+            &middot; {{ tokPerSec }} tok/s
+          </template>
+        </span>
+        <span v-else-if="message.duration_ms" class="duration-badge">
+          {{ formatDuration(message.duration_ms) }}
+        </span>
       </div>
     </div>
   </div>
@@ -51,15 +74,42 @@ marked.setOptions({
   gfm: true,
 })
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   message: {
     id: string
     role: string
     content: string
+    duration_ms?: number
   }
-}>()
+  isStreaming?: boolean
+  elapsedMs?: number
+  tokenCount?: number
+  tokPerSec?: number
+}>(), {
+  isStreaming: false,
+  elapsedMs: 0,
+  tokenCount: 0,
+  tokPerSec: 0,
+})
 
 const showThought = ref(false)
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.round(seconds % 60)
+  return `${mins}m ${secs}s`
+}
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000)
+  const mins = Math.floor(totalSec / 60)
+  const secs = totalSec % 60
+  if (mins > 0) return `${mins}:${secs.toString().padStart(2, '0')}`
+  return `${secs}s`
+}
 
 const parsed = computed(() => {
   let text = props.message.content || ''
@@ -219,6 +269,74 @@ const renderedContent = computed(() => {
   border-left-color: var(--border);
 }
 
+/* Thinking / Waiting State */
+.thinking-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.thinking-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.4;
+  animation: thinking-bounce 1.4s ease-in-out infinite;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.3;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.thinking-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  animation: thinking-pulse 2s ease-in-out infinite;
+}
+
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Streaming cursor */
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 .content-plain {
   white-space: pre-wrap;
   word-break: break-word;
@@ -228,6 +346,24 @@ const renderedContent = computed(() => {
   font-size: 0.75rem;
   color: var(--text-secondary);
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.duration-badge,
+.gen-badge {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.gen-badge {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
 }
 
 :root[data-theme="light"] .message-meta {

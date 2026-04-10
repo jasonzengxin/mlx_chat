@@ -135,7 +135,8 @@ class SessionService:
         session_id: str,
         api_key_id: str,
         role: str,
-        content: str
+        content: str,
+        duration_ms: int | None = None
     ) -> dict:
         """
         添加消息到会话
@@ -145,6 +146,7 @@ class SessionService:
             api_key_id: API Key ID
             role: 角色 (user/assistant/system)
             content: 消息内容
+            duration_ms: 生成耗时 (毫秒, 仅 assistant 消息)
 
         Returns:
             dict: 消息信息
@@ -162,10 +164,10 @@ class SessionService:
 
         await self.db.execute(
             """
-            INSERT INTO messages (id, session_id, role, content)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, duration_ms)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (message_id, session_id, role, content)
+            (message_id, session_id, role, content, duration_ms)
         )
 
         # 更新会话的 updated_at
@@ -183,6 +185,7 @@ class SessionService:
             "session_id": session_id,
             "role": role,
             "content": content,
+            "duration_ms": duration_ms,
             "created_at": datetime.now(),
         }
 
@@ -204,7 +207,7 @@ class SessionService:
 
         rows = await self.db.fetchall(
             """
-            SELECT id, session_id, role, content, created_at
+            SELECT id, session_id, role, content, duration_ms, created_at
             FROM messages
             WHERE session_id = ?
             ORDER BY created_at ASC
