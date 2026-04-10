@@ -26,6 +26,43 @@ export interface CompletionParams {
 export interface StreamingResult {
   durationMs: number
   totalTokens: number
+  ttftMs: number
+  generationMs: number
+  outputCharsPerSecond: number
+}
+
+function collectSseDataBlocks(buffer: string): { events: string[]; remainder: string } {
+  const normalized = buffer.replace(/\r\n/g, '\n')
+  const blocks = normalized.split('\n\n')
+
+  if (!normalized.endsWith('\n\n')) {
+    return {
+      events: blocks.slice(0, -1),
+      remainder: blocks[blocks.length - 1] || '',
+    }
+  }
+
+  return {
+    events: blocks.filter(Boolean),
+    remainder: '',
+  }
+}
+
+function parseSseDataLine<T>(eventBlock: string): T | null {
+  const dataLines = eventBlock
+    .split('\n')
+    .filter((line) => line.startsWith('data: '))
+    .map((line) => line.slice(6))
+
+  if (dataLines.length === 0) {
+    return null
+  }
+
+  try {
+    return JSON.parse(dataLines.join('\n')) as T
+  } catch {
+    return null
+  }
 }
 
 export async function streamingChat(
@@ -51,38 +88,60 @@ export async function streamingChat(
 
   let durationMs = 0
   let totalTokens = 0
+  let ttftMs = 0
+  let generationMs = 0
+  let outputCharsPerSecond = 0
+  let buffer = ''
 
   while (true) {
     const { done, value } = await reader.read()
-    if (done) break
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
 
-    const chunk = decoder.decode(value)
-    const lines = chunk.split('\n')
+    const { events, remainder } = collectSseDataBlocks(buffer)
+    buffer = remainder
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6))
-          if (data.token) {
-            onToken(data.token)
-          }
-          if (data.total_tokens !== undefined) {
-            totalTokens = data.total_tokens
-          }
-          if (data.duration_ms !== undefined) {
-            durationMs = data.duration_ms
-          }
-          if (data.error) {
-            throw new Error(data.error)
-          }
-        } catch {
-          // Ignore parse errors
-        }
+    for (const eventBlock of events) {
+      const data = parseSseDataLine<{
+        token?: string
+        total_tokens?: number
+        duration_ms?: number
+        ttft_ms?: number
+        generation_ms?: number
+        output_chars_per_second?: number
+        error?: string
+      }>(eventBlock)
+
+      if (!data) {
+        continue
+      }
+
+      if (data.token) {
+        onToken(data.token)
+      }
+      if (data.total_tokens !== undefined) {
+        totalTokens = data.total_tokens
+      }
+      if (data.duration_ms !== undefined) {
+        durationMs = data.duration_ms
+      }
+      if (data.ttft_ms !== undefined) {
+        ttftMs = data.ttft_ms
+      }
+      if (data.generation_ms !== undefined) {
+        generationMs = data.generation_ms
+      }
+      if (data.output_chars_per_second !== undefined) {
+        outputCharsPerSecond = data.output_chars_per_second
+      }
+      if (data.error) {
+        throw new Error(data.error)
       }
     }
+
+    if (done) break
   }
 
-  return { durationMs, totalTokens }
+  return { durationMs, totalTokens, ttftMs, generationMs, outputCharsPerSecond }
 }
 
 /**
@@ -109,24 +168,35 @@ export async function streamingChatCompletions(
     throw new Error('No response body')
   }
 
+  let buffer = ''
+
   while (true) {
     const { done, value } = await reader.read()
-    if (done) break
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
 
-    const chunk = decoder.decode(value)
-    const lines = chunk.split('\n')
+    const { events, remainder } = collectSseDataBlocks(buffer)
+    buffer = remainder
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6))
-          if (data.choices?.[0]?.delta?.content) {
-            onDelta(data.choices[0].delta.content)
-          }
-        } catch {
-          // Ignore parse errors
+    for (const eventBlock of events) {
+      const rawData = eventBlock
+        .split('\n')
+        .find((line) => line.startsWith('data: '))
+        ?.slice(6)
+
+      if (!rawData || rawData === '[DONE]') {
+        continue
+      }
+
+      try {
+        const data = JSON.parse(rawData)
+        if (data.choices?.[0]?.delta?.content) {
+          onDelta(data.choices[0].delta.content)
         }
+      } catch {
+        // Ignore parse errors
       }
     }
+
+    if (done) break
   }
 }

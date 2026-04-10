@@ -26,6 +26,23 @@ from backend.utils.model_detector import detect_local_models
 DB_PATH = os.path.join(os.path.dirname(__file__), "mlx_chat.db")
 
 
+async def _ensure_column(
+    conn: aiosqlite.Connection,
+    table_name: str,
+    column_name: str,
+    column_sql: str,
+) -> None:
+    """为旧数据库补齐缺失列。"""
+    cursor = await conn.execute(f"PRAGMA table_info({table_name})")
+    columns = await cursor.fetchall()
+    existing_column_names = {column[1] for column in columns}
+
+    if column_name not in existing_column_names:
+        await conn.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}"
+        )
+
+
 async def get_database() -> Database:
     """获取数据库连接"""
     conn = await aiosqlite.connect(DB_PATH)
@@ -82,6 +99,7 @@ async def get_database() -> Database:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     ''')
+    await _ensure_column(conn, "messages", "duration_ms", "INTEGER")
     await conn.commit()
 
     return Database(conn)

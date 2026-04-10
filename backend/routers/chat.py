@@ -30,6 +30,13 @@ class ChatRequest(BaseModel):
     system_prompt: Optional[str] = None
 
 
+def _safe_rate(total_units: int, duration_ms: int) -> float:
+    """按毫秒时长计算速率，避免除零"""
+    if duration_ms <= 0:
+        return 0.0
+    return round(total_units / (duration_ms / 1000), 2)
+
+
 # === 辅助函数 ===
 
 def get_db(request: Request) -> Database:
@@ -76,7 +83,7 @@ async def chat(
         api_key["id"]
     )
 
-    start_time = time.time()
+    start_time = time.perf_counter()
 
     async def event_generator():
         try:
@@ -90,6 +97,7 @@ async def chat(
 
             # 流式生成
             full_response = ""
+            first_token_at: float | None = None
             async for token in mlx_service.generate_stream(
                 messages=[{"role": m["role"], "content": m["content"]} for m in messages] + [
                     {"role": "user", "content": request_body.message}
@@ -98,11 +106,17 @@ async def chat(
                 max_tokens=request_body.max_tokens or session.get("max_tokens", 4096),
                 system_prompt=request_body.system_prompt or session.get("system_prompt")
             ):
+                if first_token_at is None:
+                    first_token_at = time.perf_counter()
                 full_response += token
                 yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
 
             # 计算生成耗时
-            duration_ms = int((time.time() - start_time) * 1000)
+            end_time = time.perf_counter()
+            duration_ms = int((end_time - start_time) * 1000)
+            ttft_ms = int((first_token_at - start_time) * 1000) if first_token_at is not None else duration_ms
+            generation_ms = max(duration_ms - ttft_ms, 0)
+            output_chars_per_second = _safe_rate(len(full_response), generation_ms)
 
             # 保存助手消息 (包含耗时)
             await session_service.add_message(
@@ -114,7 +128,7 @@ async def chat(
             )
 
             # 记录用量
-            elapsed = int((time.time() - start_time) * 1000)
+            elapsed = int((time.perf_counter() - start_time) * 1000)
             await usage_service.record_usage(UsageRecord(
                 api_key_id=api_key["id"],
                 session_id=request_body.session_id,
@@ -124,7 +138,16 @@ async def chat(
                 time_ms=elapsed
             ))
 
-            yield f"event: done\ndata: {json.dumps({'total_tokens': len(full_response), 'duration_ms': duration_ms})}\n\n"
+            yield (
+                "event: done\n"
+                f"data: {json.dumps({
+                    'total_tokens': len(full_response),
+                    'duration_ms': duration_ms,
+                    'ttft_ms': ttft_ms,
+                    'generation_ms': generation_ms,
+                    'output_chars_per_second': output_chars_per_second,
+                })}\n\n"
+            )
 
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"

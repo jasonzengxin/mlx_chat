@@ -128,6 +128,39 @@ describe('Chat API', () => {
     expect(tokens).toEqual(['Hello', ' World'])
   })
 
+  it('should handle streaming chat chunks split across reads', async () => {
+    const { streamingChat } = await import('@/api/chat')
+
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('event: token\ndata: {"token":"Hel'))
+        controller.enqueue(new TextEncoder().encode('lo"}\n\nevent: token\ndata: {"token":" world"}\n\n'))
+        controller.enqueue(new TextEncoder().encode('event: done\ndata: {"duration_ms":12,"total_tokens":11,"ttft_ms":3,"generation_ms":9,"output_chars_per_second":122.2}\n\n'))
+        controller.close()
+      }
+    })
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      body: mockStream
+    })
+
+    const tokens: string[] = []
+    const result = await streamingChat(
+      { session_id: '1', message: 'Hi' },
+      (token) => tokens.push(token)
+    )
+
+    expect(tokens).toEqual(['Hello', ' world'])
+    expect(result).toEqual({
+      durationMs: 12,
+      totalTokens: 11,
+      ttftMs: 3,
+      generationMs: 9,
+      outputCharsPerSecond: 122.2
+    })
+  })
+
   it('should throw error on chat failure', async () => {
     const { streamingChat } = await import('@/api/chat')
     

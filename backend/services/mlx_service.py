@@ -10,6 +10,7 @@ MLX 模型服务
 import asyncio
 import gc
 import time
+from queue import Queue
 from typing import Optional, AsyncGenerator, Dict, List
 
 import mlx_lm
@@ -89,11 +90,45 @@ class MLXService:
 
         # 构建 prompt
         prompt = self._build_prompt(messages, system_prompt)
+        sampler = make_sampler(temp=temperature)
+        stream_generate = getattr(mlx_lm, "stream_generate", None)
 
-        # 获取阻塞生成函数
-        def generate_tokens():
-            # 创建 sampler
-            sampler = make_sampler(temp=temperature)
+        if callable(stream_generate):
+            queue: Queue[str | Exception | None] = Queue()
+
+            def generate_tokens_sync():
+                try:
+                    for response in stream_generate(
+                        model=self.current_model,
+                        tokenizer=self._tokenizer,
+                        prompt=prompt,
+                        max_tokens=max_tokens,
+                        sampler=sampler,
+                    ):
+                        text = getattr(response, "text", None)
+                        if text:
+                            queue.put(text)
+                except Exception as exc:
+                    queue.put(exc)
+                finally:
+                    queue.put(None)
+
+            producer = asyncio.create_task(asyncio.to_thread(generate_tokens_sync))
+
+            try:
+                while True:
+                    item = await asyncio.to_thread(queue.get)
+                    if item is None:
+                        break
+                    if isinstance(item, Exception):
+                        raise item
+                    yield item
+            finally:
+                await producer
+            return
+
+        # 回退到非流式 generate，至少避免把完整字符串按字符拆开。
+        def generate_text():
             return mlx_lm.generate(
                 model=self.current_model,
                 tokenizer=self._tokenizer,
@@ -102,12 +137,10 @@ class MLXService:
                 sampler=sampler,
             )
 
-        # 在线程池中执行阻塞的生成操作
-        loop = asyncio.get_event_loop()
-        tokens = await loop.run_in_executor(None, generate_tokens)
-
-        for token in tokens:
-            yield token
+        loop = asyncio.get_running_loop()
+        text = await loop.run_in_executor(None, generate_text)
+        if text:
+            yield text
 
     def _build_prompt(
         self,

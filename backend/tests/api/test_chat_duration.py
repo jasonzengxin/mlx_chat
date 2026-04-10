@@ -1,6 +1,7 @@
 """
 测试聊天 API - 包含耗时统计
 """
+import asyncio
 import pytest
 import json
 from unittest.mock import patch, AsyncMock
@@ -52,9 +53,54 @@ async def test_chat_saves_duration(api_client, db_with_api_key):
     assert "done" in events
     assert "total_tokens" in events["done"]
     assert "duration_ms" in events["done"]
+    assert "ttft_ms" in events["done"]
     # Mock streaming completes instantly, so duration might be 0 or very small
     # Just verify the field exists and is a valid number
     assert isinstance(events["done"]["duration_ms"], int)
+    assert isinstance(events["done"]["ttft_ms"], int)
+
+
+@pytest.mark.asyncio
+async def test_chat_done_event_includes_ttft(api_client, db_with_api_key):
+    """测试 done 事件包含首 token 延迟"""
+    headers = {"Authorization": f"Bearer {db_with_api_key.key}"}
+
+    resp = await api_client.post(
+        "/api/v1/sessions",
+        headers=headers,
+        json={"name": "ttft test"}
+    )
+    assert resp.status_code == 201
+    session = resp.json()
+
+    async def mock_generate_stream(*args, **kwargs):
+        await asyncio.sleep(0.01)
+        yield "首"
+        yield "字"
+
+    with patch("backend.services.mlx_service.MLXService.generate_stream", side_effect=mock_generate_stream):
+        resp = await api_client.post(
+            "/api/v1/chat",
+            headers=headers,
+            json={
+                "session_id": session["id"],
+                "message": "hi"
+            }
+        )
+        assert resp.status_code == 200
+
+    events = {}
+    current_event = None
+    for line in resp.text.split("\n"):
+        if line.startswith("event:"):
+            current_event = line[6:].strip()
+        elif line.startswith("data:"):
+            data = json.loads(line[5:])
+            events[current_event] = data
+
+    assert "done" in events
+    assert isinstance(events["done"]["ttft_ms"], int)
+    assert events["done"]["ttft_ms"] >= 0
 
 
 @pytest.mark.asyncio

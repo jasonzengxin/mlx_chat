@@ -28,6 +28,19 @@ export const useChatStore = defineStore('chat', () => {
   let _genTimer: number | null = null
   let _genStartTime = 0
 
+  function scheduleUiFlush(flush: () => void): Promise<void> {
+    return new Promise((resolve) => {
+      const requestFrame = globalThis.requestAnimationFrame
+        ? globalThis.requestAnimationFrame.bind(globalThis)
+        : (cb: FrameRequestCallback) => window.setTimeout(cb, 16)
+
+      requestFrame(() => {
+        flush()
+        resolve()
+      })
+    })
+  }
+
   watch(isGenerating, (val) => {
     if (val) {
       _genStartTime = Date.now()
@@ -77,24 +90,45 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       let accumulatedContent = ''
+      const assistantIndex = messages.value.length - 1
+      let flushScheduled = false
+      let pendingFlush: Promise<void> | null = null
+
+      const flushAssistantContent = () => {
+        const assistant = messages.value[assistantIndex]
+        if (assistant) {
+          assistant.content = accumulatedContent
+        }
+      }
+
+      const ensureFlushScheduled = () => {
+        if (flushScheduled) {
+          return
+        }
+
+        flushScheduled = true
+        pendingFlush = scheduleUiFlush(() => {
+          flushScheduled = false
+          flushAssistantContent()
+        })
+      }
 
       const result = await streamingChat(params, (token) => {
         accumulatedContent += token
         tokenCount.value++
-        const msgIndex = messages.value.findIndex(m => m.id === assistantMessage.id)
-        if (msgIndex !== -1) {
-          messages.value = messages.value.map((m, i) =>
-            i === msgIndex ? { ...m, content: accumulatedContent } : m
-          )
-        }
+        ensureFlushScheduled()
       })
 
-      const durationMs = result?.durationMs ?? generatingElapsedMs.value
-      const msgIndex = messages.value.findIndex(m => m.id === assistantMessage.id)
-      if (msgIndex !== -1) {
-        messages.value = messages.value.map((m, i) =>
-          i === msgIndex ? { ...m, duration_ms: durationMs } : m
-        )
+      if (pendingFlush) {
+        await pendingFlush
+      } else {
+        flushAssistantContent()
+      }
+
+      const durationMs = result?.durationMs || generatingElapsedMs.value
+      const assistant = messages.value[assistantIndex]
+      if (assistant) {
+        assistant.duration_ms = durationMs
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error'

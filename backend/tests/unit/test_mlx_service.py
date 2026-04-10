@@ -181,8 +181,8 @@ class TestMLXServiceMocked:
     """MLX 服务 - Mock 测试"""
 
     @pytest.mark.asyncio
-    async def test_generate_stream_with_mock(self):
-        """测试流式生成 (Mock)"""
+    async def test_generate_stream_uses_stream_generate_when_available(self):
+        """测试优先使用 mlx_lm.stream_generate 做真实流式输出"""
         service = MLXService()
 
         # Mock 模型
@@ -190,9 +190,13 @@ class TestMLXServiceMocked:
         service._tokenizer = MagicMock()
         service.current_model_name = "mock-model"
 
-        # Mock mlx_lm.generate
-        with patch("backend.services.mlx_service.mlx_lm.generate") as mock_generate:
-            mock_generate.return_value = iter(["你", "好", "！"])
+        mock_chunk_1 = MagicMock()
+        mock_chunk_1.text = "你"
+        mock_chunk_2 = MagicMock()
+        mock_chunk_2.text = "好！"
+
+        with patch("backend.services.mlx_service.mlx_lm.stream_generate", create=True) as mock_stream_generate:
+            mock_stream_generate.return_value = iter([mock_chunk_1, mock_chunk_2])
 
             tokens = []
             async for token in service.generate_stream(
@@ -202,8 +206,36 @@ class TestMLXServiceMocked:
             ):
                 tokens.append(token)
 
-            assert len(tokens) == 3
-            assert tokens == ["你", "好", "！"]
+            assert tokens == ["你", "好！"]
+            mock_stream_generate.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_generate_stream_falls_back_to_generate(self):
+        """测试旧版本 mlx_lm 无 stream_generate 时回退到 generate"""
+        service = MLXService()
+
+        service.current_model = MagicMock()
+        service._tokenizer = MagicMock()
+        service.current_model_name = "mock-model"
+
+        with patch(
+            "backend.services.mlx_service.mlx_lm.stream_generate",
+            new=None,
+            create=True,
+        ):
+            with patch("backend.services.mlx_service.mlx_lm.generate") as mock_generate:
+                mock_generate.return_value = "OK"
+
+                tokens = []
+                async for token in service.generate_stream(
+                    messages=[{"role": "user", "content": "test"}],
+                    temperature=0.7,
+                    max_tokens=10,
+                ):
+                    tokens.append(token)
+
+                assert tokens == ["OK"]
+                mock_generate.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_generate_stream_with_system_prompt(self):
@@ -214,8 +246,11 @@ class TestMLXServiceMocked:
         service._tokenizer = MagicMock()
         service.current_model_name = "mock-model"
 
-        with patch("backend.services.mlx_service.mlx_lm.generate") as mock_generate:
-            mock_generate.return_value = iter(["OK"])
+        mock_chunk = MagicMock()
+        mock_chunk.text = "OK"
+
+        with patch("backend.services.mlx_service.mlx_lm.stream_generate", create=True) as mock_stream_generate:
+            mock_stream_generate.return_value = iter([mock_chunk])
 
             tokens = []
             async for token in service.generate_stream(
@@ -227,6 +262,6 @@ class TestMLXServiceMocked:
                 tokens.append(token)
 
             # 验证 build_prompt 被调用
-            mock_generate.assert_called_once()
-            call_kwargs = mock_generate.call_args
+            mock_stream_generate.assert_called_once()
+            call_kwargs = mock_stream_generate.call_args
             assert "prompt" in call_kwargs.kwargs or len(call_kwargs.args) > 0

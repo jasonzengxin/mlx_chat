@@ -7,6 +7,14 @@ vi.mock('@/api/chat', () => ({
   streamingChat: vi.fn()
 }))
 
+const mockStreamingResult = {
+  durationMs: 100,
+  totalTokens: 2,
+  ttftMs: 20,
+  generationMs: 80,
+  outputCharsPerSecond: 25,
+}
+
 describe('Chat Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -63,7 +71,7 @@ describe('Chat Store', () => {
       const { streamingChat } = await import('@/api/chat')
       
       // Mock the streaming to immediately complete
-      vi.mocked(streamingChat).mockResolvedValue(undefined)
+      vi.mocked(streamingChat).mockResolvedValue(mockStreamingResult)
       
       const store = useChatStore()
       store.setCurrentSession('session-123')
@@ -82,6 +90,7 @@ describe('Chat Store', () => {
       vi.mocked(streamingChat).mockImplementation(async (_, onToken) => {
         onToken('H')
         onToken('i')
+        return mockStreamingResult
       })
       
       const store = useChatStore()
@@ -99,6 +108,7 @@ describe('Chat Store', () => {
       vi.mocked(streamingChat).mockImplementation(async () => {
         // Small delay to allow checking state
         await new Promise(resolve => setTimeout(resolve, 10))
+        return mockStreamingResult
       })
       
       const store = useChatStore()

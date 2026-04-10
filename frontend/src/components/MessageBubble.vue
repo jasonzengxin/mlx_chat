@@ -28,7 +28,7 @@
         </div>
 
         <!-- Waiting / Thinking State (no content yet) -->
-        <div v-if="isStreaming && !parsed.content" class="thinking-state">
+        <div v-if="isStreaming && !displayContent" class="thinking-state">
           <div class="thinking-dots">
             <span></span><span></span><span></span>
           </div>
@@ -37,14 +37,18 @@
 
         <!-- Main Answer Content -->
         <div
-          v-else-if="message.role === 'assistant'"
+          v-else-if="message.role === 'assistant' && !isStreaming"
           class="content markdown-body"
           v-html="renderedContent"
         ></div>
+        <div
+          v-else-if="message.role === 'assistant'"
+          class="content content-plain"
+        >{{ displayContent }}</div>
         <div v-else class="content content-plain">{{ parsed.content }}</div>
 
         <!-- Streaming cursor -->
-        <span v-if="isStreaming && parsed.content" class="streaming-cursor"></span>
+        <span v-if="isStreaming && displayContent" class="streaming-cursor"></span>
       </div>
       <div class="message-meta">
         <span>{{ message.role === 'user' ? 'You' : 'Assistant' }}</span>
@@ -57,7 +61,7 @@
             &middot; {{ tokPerSec }} tok/s
           </template>
         </span>
-        <span v-else-if="message.duration_ms" class="duration-badge">
+        <span v-else-if="message.duration_ms != null" class="duration-badge">
           {{ formatDuration(message.duration_ms) }}
         </span>
       </div>
@@ -116,15 +120,15 @@ const parsed = computed(() => {
   let thought = null
   let content = text
 
-  const endTagIndex = text.toLowerCase().lastIndexOf('</think>')
-  const startTagIndex = text.toLowerCase().indexOf('<thought>')
-  
-  if (endTagIndex !== -1) {
-    const startOffset = startTagIndex !== -1 ? startTagIndex + 9 : 0
+  const lowerText = text.toLowerCase()
+  const startTagIndex = lowerText.indexOf('<think>')
+  const endTagIndex = lowerText.lastIndexOf('</think>')
+
+  if (startTagIndex !== -1 && endTagIndex !== -1 && endTagIndex > startTagIndex) {
+    const startOffset = startTagIndex + 7
     thought = text.substring(startOffset, endTagIndex).trim()
     content = text.substring(endTagIndex + 8).trim()
-  } 
-  else if (text.startsWith('Thinking Process:')) {
+  } else if (text.startsWith('Thinking Process:')) {
     const lastGapIndex = text.lastIndexOf('\n\n')
     if (lastGapIndex !== -1 && lastGapIndex > 20) {
       thought = text.substring(0, lastGapIndex).replace(/^Thinking Process:\s*/i, '').trim()
@@ -148,8 +152,29 @@ const parsed = computed(() => {
   }
 })
 
+const displayContent = computed(() => {
+  if (!props.isStreaming) {
+    return parsed.value.content
+  }
+
+  const text = props.message.content || ''
+  const lowerText = text.toLowerCase()
+  const startTagIndex = lowerText.indexOf('<think>')
+  const endTagIndex = lowerText.lastIndexOf('</think>')
+
+  if (startTagIndex !== -1 && endTagIndex === -1) {
+    return ''
+  }
+
+  if (startTagIndex !== -1 && endTagIndex !== -1 && endTagIndex > startTagIndex) {
+    return text.substring(endTagIndex + 8).trim()
+  }
+
+  return parsed.value.content
+})
+
 const renderedContent = computed(() => {
-  const raw = parsed.value.content
+  const raw = displayContent.value
   if (!raw) return ''
   try {
     return marked.parse(raw) as string

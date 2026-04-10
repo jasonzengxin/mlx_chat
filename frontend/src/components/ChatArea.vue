@@ -66,18 +66,24 @@ function clearError() {
   store.error = null
 }
 
-function scrollToBottom() {
+function scrollToBottom(behavior: ScrollBehavior = 'auto') {
   nextTick(() => {
-    bottom.value?.scrollIntoView({ behavior: 'smooth' })
+    bottom.value?.scrollIntoView({ behavior, block: 'end' })
   })
 }
 
-watch(messages, () => {
-  scrollToBottom()
-}, { deep: true })
+watch(() => messages.value.length, (_, previousLength) => {
+  scrollToBottom(previousLength > 0 ? 'smooth' : 'auto')
+})
+
+watch(() => store.tokenCount, () => {
+  if (store.isGenerating) {
+    scrollToBottom('auto')
+  }
+})
 
 watch(() => store.isGenerating, (val) => {
-  if (val) scrollToBottom()
+  scrollToBottom(val ? 'auto' : 'smooth')
 })
 
 onMounted(() => {
