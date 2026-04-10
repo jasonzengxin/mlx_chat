@@ -104,28 +104,31 @@ describe('Chat API', () => {
 
   it('should handle streaming chat response', async () => {
     const { streamingChat } = await import('@/api/chat')
-    
-    // Mock ReadableStream
+
+    // Mock ReadableStream - 使用正确的 SSE 格式
     const mockStream = new ReadableStream({
       start(controller) {
-        controller.enqueue(new TextEncoder().encode('data: {"token":"Hello"}\n'))
-        controller.enqueue(new TextEncoder().encode('data: {"token":" World"}\n'))
+        controller.enqueue(new TextEncoder().encode('event: token\ndata: {"token":"Hello"}\n\n'))
+        controller.enqueue(new TextEncoder().encode('event: token\ndata: {"token":" World"}\n\n'))
+        controller.enqueue(new TextEncoder().encode('event: done\ndata: {"total_tokens":12,"duration_ms":100,"ttft_ms":20,"generation_ms":80,"output_chars_per_second":15}\n\n'))
         controller.close()
       }
     })
-    
+
     mockFetch.mockResolvedValue({
       ok: true,
       body: mockStream
     })
-    
+
     const tokens: string[] = []
-    await streamingChat(
+    const result = await streamingChat(
       { session_id: '1', message: 'Hi' },
       (token) => tokens.push(token)
     )
-    
+
     expect(tokens).toEqual(['Hello', ' World'])
+    expect(result.durationMs).toBe(100)
+    expect(result.ttftMs).toBe(20)
   })
 
   it('should handle streaming chat chunks split across reads', async () => {
