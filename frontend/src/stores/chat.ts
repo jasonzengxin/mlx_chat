@@ -17,6 +17,13 @@ export interface Message {
   duration_ms?: number
 }
 
+export interface SendMessageOptions {
+  temperature?: number
+  max_tokens?: number
+  system_prompt?: string
+  context_messages?: number
+}
+
 export const useChatStore = defineStore('chat', () => {
   const currentSessionId = ref<string | null>(null)
   const messages = ref<Message[]>([])
@@ -56,7 +63,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   })
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string, options?: SendMessageOptions) {
     if (!currentSessionId.value) {
       error.value = '请先创建或选择一个会话'
       return
@@ -86,7 +93,8 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const params: ChatParams = {
         session_id: currentSessionId.value,
-        message: content
+        message: content,
+        ...options
       }
 
       let accumulatedContent = ''

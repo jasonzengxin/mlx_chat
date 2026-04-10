@@ -153,6 +153,48 @@ async function copyContent() {
  * double-newline separator and then a clearly different answer section, split it.
  */
 function splitImplicitThinking(text: string): { thought: string | null; content: string } {
+  const trimmed = text.trim()
+  if (!trimmed) return { thought: null, content: text }
+
+  const lower = trimmed.toLowerCase()
+  const explicitThinkingStarts = [
+    'thinking process:',
+    'let me think',
+    'my reasoning:',
+    'the question/task:',
+  ]
+  const hasExplicitThinkingStart = explicitThinkingStarts.some((p) => lower.startsWith(p))
+
+  // If the model repeats a clear answer heading, treat earlier part as thought.
+  const repeatedAnswerHeading = /给\s*\d+\s*岁孩子解释[:：]/g
+  const headingMatches = Array.from(trimmed.matchAll(repeatedAnswerHeading))
+  if (headingMatches.length >= 2) {
+    const splitAt = headingMatches[1].index ?? -1
+    if (splitAt > 0) {
+      return {
+        thought: trimmed.slice(0, splitAt).trim(),
+        content: trimmed.slice(splitAt).trim(),
+      }
+    }
+  }
+
+  // Generic explicit split markers for "reasoning -> final answer" style outputs.
+  const answerMarkers = [
+    /\n{2,}final answer\s*:/i,
+    /\n{2,}answer\s*:/i,
+    /\n{2,}最终回答[:：]/,
+    /\n{2,}给\s*\d+\s*岁孩子解释[:：]/,
+  ]
+  for (const marker of answerMarkers) {
+    const match = marker.exec(trimmed)
+    if (match?.index && match.index > 30) {
+      return {
+        thought: trimmed.slice(0, match.index).trim(),
+        content: trimmed.slice(match.index).trim(),
+      }
+    }
+  }
+
   const thinkPrefixes = [
     /^嗯[，,]/,
     /^好的[，,]/,
@@ -163,18 +205,31 @@ function splitImplicitThinking(text: string): { thought: string | null; content:
     /^这个问题/,
     /^关于这个/,
     /^分析一下/,
+    /^let me think/i,
+    /^thinking process:/i,
+    /^my reasoning:/i,
+    /^the question\/task:/i,
   ]
-  const hasThinkPrefix = thinkPrefixes.some(p => p.test(text.trim()))
+  const hasThinkPrefix = hasExplicitThinkingStart || thinkPrefixes.some(p => p.test(trimmed))
   if (!hasThinkPrefix) return { thought: null, content: text }
 
-  const separators = ['\n\n---\n\n', '\n---\n', '\n\n']
-  for (const sep of separators) {
-    const idx = text.indexOf(sep)
-    if (idx > 50 && idx < text.length - 20) {
-      const before = text.substring(0, idx).trim()
-      const after = text.substring(idx + sep.length).trim()
-      const answerSignals = [/^["""「]/, /^[A-Z]/, /^\*\*/, /^#+\s/, /^[-•]\s/]
-      if (answerSignals.some(p => p.test(after))) {
+  const answerSignals = [
+    /^["""「『《]/,
+    /^[A-Z]/,
+    /^[\u4e00-\u9fff]/,
+    /^\*\*/,
+    /^#+\s/,
+    /^[-•]\s/,
+  ]
+  const boundaryRegex = /\n{2,}|(?:\n-{3,}\n)/g
+  const boundaries = Array.from(trimmed.matchAll(boundaryRegex))
+  for (const match of boundaries) {
+    const idx = match.index ?? -1
+    const sepLen = match[0]?.length ?? 0
+    if (idx > 50 && idx < trimmed.length - 20) {
+      const before = trimmed.substring(0, idx).trim()
+      const after = trimmed.substring(idx + sepLen).trim()
+      if (answerSignals.some((p) => p.test(after))) {
         return { thought: before, content: after }
       }
     }

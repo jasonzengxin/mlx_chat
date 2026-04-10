@@ -75,32 +75,59 @@
                 <option :value="-1">All</option>
               </select>
             </div>
+            <button
+              class="toggle-panel-btn"
+              :class="{ active: showParams }"
+              @click="showParams = !showParams"
+              title="Parameters"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
           </div>
         </header>
-        <div class="chat-content">
+        <div class="chat-content" :class="{ 'with-panel': showParams }">
           <ChatArea />
         </div>
         <footer class="chat-footer">
           <InputArea />
         </footer>
+        <ParameterPanel
+          :show="showParams"
+          :temperature="paramTemperature"
+          :maxTokens="paramMaxTokens"
+          :systemPrompt="paramSystemPrompt"
+          @close="showParams = false"
+          @update:temperature="onTemperatureChange"
+          @update:maxTokens="onMaxTokensChange"
+          @update:systemPrompt="onSystemPromptChange"
+        />
       </main>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { hasApiKey as checkApiKey, setApiKey } from '@/api/auth'
 import { useSessionStore } from '@/stores/session'
 import ModelSelector from '@/components/ModelSelector.vue'
 import SessionList from '@/components/SessionList.vue'
 import ChatArea from '@/components/ChatArea.vue'
 import InputArea from '@/components/InputArea.vue'
+import ParameterPanel from '@/components/ParameterPanel.vue'
 
 const sessionStore = useSessionStore()
 const apiKeyInput = ref('')
 const error = ref('')
 const hasApiKey = ref(false)
+const showParams = ref(false)
+
+// Parameters state - synced with current session
+const paramTemperature = ref(0.7)
+const paramMaxTokens = ref(4096)
+const paramSystemPrompt = ref('')
+
+let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const currentSessionName = computed(() => {
   const session = sessionStore.getCurrentSession()
@@ -112,12 +139,52 @@ const currentContextMessages = computed(() => {
   return session?.context_messages ?? 20
 })
 
+// Load params when session changes
+watch(currentSessionName, () => {
+  const session = sessionStore.getCurrentSession()
+  if (session) {
+    paramTemperature.value = session.temperature ?? 0.7
+    paramMaxTokens.value = session.max_tokens ?? 4096
+    paramSystemPrompt.value = session.system_prompt ?? ''
+  }
+}, { immediate: true })
+
 function onContextChange(e: Event) {
   const val = Number((e.target as HTMLSelectElement).value)
   const session = sessionStore.getCurrentSession()
   if (session) {
     sessionStore.updateSession(session.id, { context_messages: val } as any)
   }
+}
+
+// Debounced save to session
+function scheduleSave() {
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
+  saveDebounceTimer = setTimeout(() => {
+    const session = sessionStore.getCurrentSession()
+    if (session) {
+      sessionStore.updateSession(session.id, {
+        temperature: paramTemperature.value,
+        max_tokens: paramMaxTokens.value,
+        system_prompt: paramSystemPrompt.value
+      } as any)
+    }
+  }, 500)
+}
+
+function onTemperatureChange(val: number) {
+  paramTemperature.value = val
+  scheduleSave()
+}
+
+function onMaxTokensChange(val: number) {
+  paramMaxTokens.value = val
+  scheduleSave()
+}
+
+function onSystemPromptChange(val: string) {
+  paramSystemPrompt.value = val
+  scheduleSave()
 }
 
 onMounted(() => {
@@ -384,11 +451,37 @@ function setupApiKey() {
   border-color: var(--accent);
 }
 
+.toggle-panel-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-panel-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.toggle-panel-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 .chat-content {
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .chat-footer {

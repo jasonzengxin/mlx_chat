@@ -84,7 +84,16 @@ function send() {
   inputText.value = ''
   if (inputRef.value) inputRef.value.style.height = 'auto'
 
-  chatStore.sendMessage(text)
+  // Get session parameters
+  const session = sessionStore.getCurrentSession()
+  const options = session ? {
+    temperature: session.temperature,
+    max_tokens: session.max_tokens,
+    system_prompt: session.system_prompt,
+    context_messages: session.context_messages
+  } : undefined
+
+  chatStore.sendMessage(text, options)
 }
 
 onMounted(() => {
