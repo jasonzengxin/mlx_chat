@@ -1,101 +1,144 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
-
-// Simple component tests without full Vue test utils setup
-// Testing the logic through the component's emit events
+import ParameterPanel from './ParameterPanel.vue'
 
 describe('ParameterPanel Component', () => {
-  describe('Temperature slider', () => {
-    it('should emit update:temperature when slider changes', async () => {
-      // This test verifies the temperature range (0-2 with step 0.1)
-      const min = 0
-      const max = 2
-      const step = 0.1
+  const defaultProps = {
+    show: true,
+    temperature: 0.7,
+    maxTokens: 4096,
+    systemPrompt: ''
+  }
 
-      expect(min).toBe(0)
-      expect(max).toBe(2)
-      expect(step).toBe(0.1)
+  function createWrapper(props = {}) {
+    return mount(ParameterPanel, {
+      props: { ...defaultProps, ...props }
+    })
+  }
 
-      // Verify common values are within range
-      expect(0.7).toBeGreaterThanOrEqual(min)
-      expect(0.7).toBeLessThanOrEqual(max)
+  describe('Visibility', () => {
+    it('should render when show is true', () => {
+      const wrapper = createWrapper({ show: true })
+      expect(wrapper.find('.parameter-panel').exists()).toBe(true)
     })
 
-    it('should have valid temperature values', () => {
-      const temperatures = [0, 0.1, 0.5, 0.7, 1.0, 1.5, 2.0]
-      temperatures.forEach(t => {
-        expect(t).toBeGreaterThanOrEqual(0)
-        expect(t).toBeLessThanOrEqual(2)
-        expect((t * 10) % 1).toBe(0) // Should be divisible by step
-      })
+    it('should not render when show is false', () => {
+      const wrapper = createWrapper({ show: false })
+      expect(wrapper.find('.parameter-panel').exists()).toBe(false)
+    })
+
+    it('should emit close when close button is clicked', async () => {
+      const wrapper = createWrapper()
+      await wrapper.find('.close-btn').trigger('click')
+      expect(wrapper.emitted('close')).toBeTruthy()
+    })
+  })
+
+  describe('Temperature slider', () => {
+    it('should display current temperature value', () => {
+      const wrapper = createWrapper({ temperature: 1.5 })
+      expect(wrapper.find('.param-value').text()).toBe('1.5')
+    })
+
+    it('should emit update:temperature when slider changes', async () => {
+      const wrapper = createWrapper({ temperature: 0.7 })
+      const slider = wrapper.find('.slider')
+
+      await slider.setValue(1.2)
+      expect(wrapper.emitted('update:temperature')).toBeTruthy()
+      expect(wrapper.emitted('update:temperature')![0]).toEqual([1.2])
     })
   })
 
   describe('Max Tokens input', () => {
-    it('should have valid range for max tokens', () => {
-      const min = 1
-      const max = 8192
-
-      expect(min).toBe(1)
-      expect(max).toBe(8192)
+    it('should display current max tokens value', () => {
+      const wrapper = createWrapper({ maxTokens: 2048 })
+      const input = wrapper.find('.input-field')
+      expect(input.element.value).toBe('2048')
     })
 
-    it('should validate max tokens bounds', () => {
-      const validateMaxTokens = (val: number) => Math.min(8192, Math.max(1, val))
+    it('should emit update:maxTokens when input changes', async () => {
+      const wrapper = createWrapper({ maxTokens: 4096 })
+      const input = wrapper.find('.input-field')
 
-      expect(validateMaxTokens(0)).toBe(1)
-      expect(validateMaxTokens(-1)).toBe(1)
-      expect(validateMaxTokens(10000)).toBe(8192)
-      expect(validateMaxTokens(4096)).toBe(4096)
+      await input.setValue('2048')
+      expect(wrapper.emitted('update:maxTokens')).toBeTruthy()
+      expect(wrapper.emitted('update:maxTokens')![0]).toEqual([2048])
     })
   })
 
-  describe('System Prompt', () => {
-    it('should allow empty system prompt', () => {
-      const systemPrompt = ''
-      expect(systemPrompt).toBe('')
+  describe('System Prompt textarea', () => {
+    it('should display current system prompt', () => {
+      const wrapper = createWrapper({ systemPrompt: 'Test prompt' })
+      const textarea = wrapper.find('.textarea-field')
+      expect(textarea.element.value).toBe('Test prompt')
     })
 
-    it('should allow long system prompts', () => {
-      const longPrompt = 'A'.repeat(1000)
-      expect(longPrompt.length).toBe(1000)
+    it('should emit update:systemPrompt when changed', async () => {
+      const wrapper = createWrapper({ systemPrompt: '' })
+      const textarea = wrapper.find('.textarea-field')
+
+      await textarea.setValue('New prompt')
+      expect(wrapper.emitted('update:systemPrompt')).toBeTruthy()
+      expect(wrapper.emitted('update:systemPrompt')![0]).toEqual(['New prompt'])
+    })
+
+    it('should show clear button when system prompt is not empty', () => {
+      const wrapper = createWrapper({ systemPrompt: 'Some text' })
+      expect(wrapper.find('.clear-btn').exists()).toBe(true)
+    })
+
+    it('should not show clear button when system prompt is empty', () => {
+      const wrapper = createWrapper({ systemPrompt: '' })
+      expect(wrapper.find('.clear-btn').exists()).toBe(false)
+    })
+
+    it('should emit empty string when clear button is clicked', async () => {
+      const wrapper = createWrapper({ systemPrompt: 'Some text' })
+      await wrapper.find('.clear-btn').trigger('click')
+      expect(wrapper.emitted('update:systemPrompt')).toBeTruthy()
+      expect(wrapper.emitted('update:systemPrompt')![0]).toEqual([''])
     })
   })
 
-  describe('Parameter persistence defaults', () => {
-    it('should have correct default values', () => {
-      const defaults = {
-        temperature: 0.7,
-        maxTokens: 4096,
-        systemPrompt: ''
-      }
-
-      expect(defaults.temperature).toBe(0.7)
-      expect(defaults.maxTokens).toBe(4096)
-      expect(defaults.systemPrompt).toBe('')
-    })
-  })
-
-  describe('Reset functionality', () => {
-    it('should reset all parameters to defaults', () => {
-      const defaults = {
-        temperature: 0.7,
-        maxTokens: 4096,
-        systemPrompt: ''
-      }
-
-      const customValues = {
+  describe('Reset button', () => {
+    it('should emit default values when reset is clicked', async () => {
+      const wrapper = createWrapper({
         temperature: 1.5,
         maxTokens: 2048,
-        systemPrompt: 'You are a helpful assistant.'
-      }
+        systemPrompt: 'Custom prompt'
+      })
 
-      // Reset to defaults
-      const reset = () => defaults
+      await wrapper.find('.reset-btn').trigger('click')
 
-      expect(reset()).toEqual(defaults)
-      expect(reset()).not.toEqual(customValues)
+      // Check all three parameters are reset
+      expect(wrapper.emitted('update:temperature')).toBeTruthy()
+      expect(wrapper.emitted('update:temperature')![0]).toEqual([0.7])
+
+      expect(wrapper.emitted('update:maxTokens')).toBeTruthy()
+      expect(wrapper.emitted('update:maxTokens')![0]).toEqual([4096])
+
+      expect(wrapper.emitted('update:systemPrompt')).toBeTruthy()
+      expect(wrapper.emitted('update:systemPrompt')![0]).toEqual([''])
+    })
+  })
+
+  describe('Max tokens validation', () => {
+    it('should clamp max tokens to 1-8192 range', async () => {
+      const wrapper = createWrapper({ maxTokens: 4096 })
+      const input = wrapper.find('.input-field')
+
+      // Test boundary: value > 8192 should be clamped
+      await input.setValue('10000')
+      const emitted = wrapper.emitted('update:maxTokens')?.[0]
+      expect(emitted?.[0]).toBe(8192)
+    })
+  })
+
+  describe('Panel header', () => {
+    it('should display "Parameters" title', () => {
+      const wrapper = createWrapper()
+      expect(wrapper.find('.panel-header h3').text()).toBe('Parameters')
     })
   })
 })
