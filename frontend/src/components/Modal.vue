@@ -16,7 +16,11 @@
         </div>
         <div class="modal-footer" v-else>
           <button class="secondary-btn" @click="$emit('close')">{{ cancelText }}</button>
-          <button class="primary-btn" @click="$emit('confirm')" :disabled="confirmDisabled">
+          <button
+            :class="confirmVariant === 'danger' ? 'danger-btn' : 'primary-btn'"
+            @click="$emit('confirm')"
+            :disabled="confirmDisabled"
+          >
             {{ confirmText }}
           </button>
         </div>
@@ -33,6 +37,7 @@ defineProps<{
   confirmText?: string;
   cancelText?: string;
   confirmDisabled?: boolean;
+  confirmVariant?: 'primary' | 'danger';
 }>();
 
 defineEmits(['close', 'confirm']);
@@ -110,6 +115,25 @@ defineEmits(['close', 'confirm']);
 }
 
 .primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.danger-btn {
+  background-color: var(--error, #ef4444);
+  color: white;
+  border: none;
+  padding: 0.625rem 1.25rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.danger-btn:hover {
+  background-color: #dc2626;
+}
+
+.danger-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
