@@ -73,3 +73,16 @@ build/
 # MLX models cache (user-specific)
 .cache/
 models--*/
+
+# IDE / AI Agent
+.cursor/
+.vscode/
+
+# Vite build cache
+.vite/
+
+# Playwright test artifacts
+playwright-report/
+test-results/
+frontend/playwright-report/
+frontend/test-results/
