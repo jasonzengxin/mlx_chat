@@ -109,7 +109,36 @@ async def db_connection():
             params_count TEXT DEFAULT '',
             quantization TEXT DEFAULT '',
             is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            model_type TEXT DEFAULT 'local',
+            endpoint TEXT DEFAULT '',
+            remote_provider TEXT DEFAULT '',
+            remote_base_url TEXT DEFAULT '',
+            remote_api_key TEXT DEFAULT ''
+        );
+
+        -- 远程 Provider 表
+        CREATE TABLE remote_providers (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            provider_type TEXT DEFAULT 'custom',
+            base_url TEXT DEFAULT '',
+            api_key TEXT DEFAULT '',
+            is_active BOOLEAN DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 导出模板表
+        CREATE TABLE export_templates (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            language TEXT DEFAULT 'both',
+            template_content TEXT NOT NULL,
+            system_prompt TEXT NOT NULL,
+            is_builtin BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         -- 索引
@@ -379,6 +408,7 @@ async def app(db_connection):
     from backend.main import create_app
     from backend.database import Database
     from backend.services.model_registry_service import ModelRegistryService
+    from backend.services.export_template_service import ExportTemplateService
 
     # 创建 Database 包装
     db = Database(db_connection)
@@ -390,6 +420,11 @@ async def app(db_connection):
     registry = ModelRegistryService(db)
     await registry.initialize()
     app.state.model_registry = registry
+
+    # 设置并初始化 export_template_service
+    export_service = ExportTemplateService(db)
+    await export_service.initialize()
+    app.state.export_template_service = export_service
 
     return app
 

@@ -46,7 +46,7 @@ export async function getSession(id: string): Promise<Session> {
   return response.json()
 }
 
-export async function createSession(params: { name?: string }): Promise<Session> {
+export async function createSession(params: { name?: string; model?: string }): Promise<Session> {
   const response = await fetch('/api/v1/sessions', {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -86,4 +86,17 @@ export async function deleteSession(id: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`Failed to delete session: ${response.statusText}`)
   }
+}
+
+export async function deleteAllSessions(): Promise<{ deleted_count: number }> {
+  const response = await fetch('/api/v1/sessions', {
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete all sessions: ${response.statusText}`)
+  }
+
+  return response.json()
 }

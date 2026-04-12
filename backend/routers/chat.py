@@ -7,6 +7,7 @@ Chat API 路由
 import time
 import json
 from typing import Optional
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -14,10 +15,54 @@ from pydantic import BaseModel, Field
 from backend.auth.dependencies import verify_api_key, get_mlx_service
 from backend.services.session_service import SessionService
 from backend.services.usage_service import UsageService, UsageRecord
+from backend.services.model_registry_service import ModelRegistryService
 from backend.database import Database
 
 
 router = APIRouter()
+
+
+async def generate_remote_stream(
+    base_url: str,
+    api_key: str,
+    endpoint: str,
+    model: str,
+    messages: list,
+    temperature: float,
+    max_tokens: int,
+):
+    """生成远程 API 的流式响应"""
+    url = f"{base_url}{endpoint}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
+        async with client.stream("POST", url, headers=headers, json=payload) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]  # Remove "data: " prefix
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                    if "choices" in chunk and len(chunk["choices"]) > 0:
+                        delta = chunk["choices"][0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                except json.JSONDecodeError:
+                    continue
 
 
 # === 请求模型 ===
@@ -98,6 +143,12 @@ async def chat(
     else:
         messages = all_messages
 
+    # 获取模型类型
+    model_registry = request.app.state.model_registry
+    session_model = session.get("model", "")
+    model_info = await model_registry.get_model(session_model) if session_model and session_model != "default" else None
+    model_type = model_info.model_type if model_info else "local"
+
     start_time = time.perf_counter()
 
     async def event_generator():
@@ -110,21 +161,55 @@ async def chat(
                 request_body.message
             )
 
-            # 流式生成
+            # 构建消息列表
+            chat_messages = [{"role": m["role"], "content": m["content"]} for m in messages] + [
+                {"role": "user", "content": request_body.message}
+            ]
+
+            # 获取生成参数
+            temperature = request_body.temperature or session.get("temperature", 0.7)
+            max_tokens = request_body.max_tokens or session.get("max_tokens", 4096)
+
             full_response = ""
             first_token_at: float | None = None
-            async for token in mlx_service.generate_stream(
-                messages=[{"role": m["role"], "content": m["content"]} for m in messages] + [
-                    {"role": "user", "content": request_body.message}
-                ],
-                temperature=request_body.temperature or session.get("temperature", 0.7),
-                max_tokens=request_body.max_tokens or session.get("max_tokens", 4096),
-                system_prompt=request_body.system_prompt or session.get("system_prompt")
-            ):
-                if first_token_at is None:
-                    first_token_at = time.perf_counter()
-                full_response += token
-                yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
+
+            if model_type == "remote":
+                r_base = getattr(model_info, "remote_base_url", "") or ""
+                r_key = getattr(model_info, "remote_api_key", "") or ""
+                if not r_base or not r_key:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Remote model '{model_info.name}' is missing credentials. "
+                            "Re-add this model from a configured provider."
+                        ),
+                    )
+
+                async for token in generate_remote_stream(
+                    base_url=r_base,
+                    api_key=r_key,
+                    endpoint=model_info.endpoint or "/chat/completions",
+                    model=session.get("model", ""),
+                    messages=chat_messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                ):
+                    if first_token_at is None:
+                        first_token_at = time.perf_counter()
+                    full_response += token
+                    yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
+            else:
+                # 本地 MLX 模型
+                async for token in mlx_service.generate_stream(
+                    messages=chat_messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    system_prompt=request_body.system_prompt or session.get("system_prompt")
+                ):
+                    if first_token_at is None:
+                        first_token_at = time.perf_counter()
+                    full_response += token
+                    yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
 
             # 计算生成耗时
             end_time = time.perf_counter()

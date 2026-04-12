@@ -131,6 +131,19 @@ async def update_session(
     return session
 
 
+@router.delete("", status_code=status.HTTP_200_OK)
+async def delete_all_sessions(
+    request: Request,
+    api_key: dict = Depends(verify_api_key),
+):
+    """删除所有会话"""
+    session_service = get_session_service(request)
+
+    count = await session_service.delete_all_sessions(api_key["id"])
+
+    return {"deleted_count": count}
+
+
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(
     session_id: str,

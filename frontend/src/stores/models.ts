@@ -23,6 +23,14 @@ export const useModelsStore = defineStore('models', () => {
 
   const hasLoadedModel = computed(() => loadedModelId.value !== null)
 
+  const localModels = computed(() =>
+    models.value.filter(m => !m.model_type || m.model_type === 'local')
+  )
+
+  const remoteModels = computed(() =>
+    models.value.filter(m => m.model_type === 'remote')
+  )
+
   // Actions
   async function fetchModels() {
     loading.value = true
@@ -62,6 +70,14 @@ export const useModelsStore = defineStore('models', () => {
     }
   }
 
+  function selectModel(modelId: string) {
+    // For remote models, just mark as selected without API call
+    models.value.forEach(m => {
+      m.is_loaded = m.model_id === modelId
+    })
+    loadedModelId.value = modelId
+  }
+
   return {
     // State
     models,
@@ -71,8 +87,11 @@ export const useModelsStore = defineStore('models', () => {
     // Computed
     loadedModel,
     hasLoadedModel,
+    localModels,
+    remoteModels,
     // Actions
     fetchModels,
-    loadModel
+    loadModel,
+    selectModel
   }
 })

@@ -3,8 +3,13 @@
     <button class="selector-trigger" @click="showList = !showList" :class="{ active: showList }">
       <div class="current-info">
         <template v-if="modelsStore.loadedModel">
+          <span class="model-type-icon" :class="modelsStore.loadedModel.model_type || 'local'">
+            {{ getModelIcon(modelsStore.loadedModel.model_type) }}
+          </span>
           <span class="model-name">{{ modelsStore.loadedModel.name }}</span>
-          <span class="status-badge loaded">Loaded</span>
+          <span class="status-badge" :class="getStatusBadgeClass(modelsStore.loadedModel.model_type)">
+            {{ modelsStore.loadedModel.model_type === 'remote' ? 'API' : 'Loaded' }}
+          </span>
         </template>
         <template v-else-if="loadingModel">
           <span class="model-name">{{ loadingModel.split('/').pop() }}</span>
@@ -29,15 +34,19 @@
       <div class="model-dropdown" v-if="showList">
         <div class="dropdown-header">Available Models</div>
         <div class="model-list">
-          <div 
-            v-for="model in modelsStore.models" 
+          <!-- Local models -->
+          <div
+            v-for="model in localModels"
             :key="model.model_id"
             class="model-item"
             :class="{ active: model.is_loaded }"
             @click="startLoad(model.model_id)"
           >
             <div class="model-info">
-              <div class="model-title">{{ model.name }}</div>
+              <div class="model-title">
+                <span class="model-type-icon local">&#x1F5A5;</span>
+                {{ model.name }}
+              </div>
               <div class="model-meta">{{ model.params_count }} · {{ model.description }}</div>
             </div>
             <div class="load-status loading-time" v-if="loadingModel === model.model_id">
@@ -48,6 +57,40 @@
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </div>
           </div>
+
+          <!-- Remote models section -->
+          <template v-if="remoteModels.length > 0">
+            <div class="model-section-divider">
+              <span>Remote API Models</span>
+            </div>
+            <div
+              v-for="model in remoteModels"
+              :key="model.model_id"
+              class="model-item remote"
+              :class="{ active: model.is_loaded }"
+              @click="selectRemoteModel(model.model_id)"
+            >
+              <div class="model-info">
+                <div class="model-title">
+                  <span class="model-type-icon remote">&#x2601;</span>
+                  {{ model.name }}
+                </div>
+                <div class="model-meta">{{ model.remote_provider ? model.remote_provider + '/' : '' }}{{ model.model_id }}</div>
+              </div>
+              <div class="model-actions">
+                <div class="load-status" v-if="model.is_loaded">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <button
+                  class="delete-model-btn"
+                  @click.stop="removeRemoteModel(model)"
+                  title="Remove model"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </transition>
@@ -55,19 +98,53 @@
     <div v-if="modelsStore.error" class="error-toast">
       {{ modelsStore.error }}
     </div>
+
+    <Modal
+      :show="showDeleteModal"
+      title="Remove Model"
+      confirmText="Remove"
+      cancelText="Cancel"
+      confirmVariant="danger"
+      size="sm"
+      :confirmDisabled="deleting"
+      @close="showDeleteModal = false"
+      @confirm="confirmRemoveModel"
+    >
+      <p style="margin: 0; line-height: 1.5;">
+        Remove remote model <strong>{{ pendingDeleteModel?.name }}</strong>?
+      </p>
+    </Modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useModelsStore } from '@/stores/models'
+import { useSessionStore } from '@/stores/session'
+import { deleteModel } from '@/api/models'
+import type { Model } from '@/api/models'
+import Modal from '@/components/Modal.vue'
 
 const modelsStore = useModelsStore()
+const sessionStore = useSessionStore()
 const showList = ref(false)
 const loadingModel = ref<string | null>(null)
 const elapsedTime = ref(0)
 const container = ref<HTMLElement | null>(null)
 let timer: number | null = null
+
+const showDeleteModal = ref(false)
+const pendingDeleteModel = ref<Model | null>(null)
+const deleting = ref(false)
+
+// Computed: separate local and remote models
+const localModels = computed(() =>
+  modelsStore.models.filter(m => !m.model_type || m.model_type === 'local')
+)
+
+const remoteModels = computed(() =>
+  modelsStore.models.filter(m => m.model_type === 'remote')
+)
 
 onMounted(() => {
   modelsStore.fetchModels()
@@ -91,9 +168,41 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
+function getModelIcon(modelType?: string): string {
+  return modelType === 'remote' ? '\u2601' : '\u1F5A5' // cloud vs computer
+}
+
+function getStatusBadgeClass(modelType?: string): string {
+  return modelType === 'remote' ? 'api' : 'loaded'
+}
+
+async function syncSessionModel(modelId: string): Promise<boolean> {
+  const sessionId = sessionStore.currentSessionId
+  if (!sessionId) {
+    modelsStore.error = 'Please create or select a session first'
+    return false
+  }
+
+  const updated = await sessionStore.updateSession(sessionId, { model: modelId })
+  if (!updated) {
+    modelsStore.error = 'Failed to update session model'
+    return false
+  }
+  return true
+}
+
 async function startLoad(modelId: string) {
-  if (loadingModel.value || modelsStore.models.find(m => m.model_id === modelId)?.is_loaded) {
-    if (modelsStore.models.find(m => m.model_id === modelId)?.is_loaded) {
+  const model = modelsStore.models.find(m => m.model_id === modelId)
+  if (!model) return
+
+  // Remote models don't need loading
+  if (model.model_type === 'remote') {
+    await selectRemoteModel(modelId)
+    return
+  }
+
+  if (loadingModel.value || model.is_loaded) {
+    if (model.is_loaded) {
        showList.value = false
     }
     return
@@ -109,6 +218,7 @@ async function startLoad(modelId: string) {
   try {
     await modelsStore.loadModel(modelId)
     if (!modelsStore.error) {
+      await syncSessionModel(modelId)
       showList.value = false
     }
   } finally {
@@ -118,6 +228,34 @@ async function startLoad(modelId: string) {
     }
     loadingModel.value = null
     elapsedTime.value = 0
+  }
+}
+
+async function selectRemoteModel(modelId: string) {
+  const ok = await syncSessionModel(modelId)
+  if (!ok) return
+  modelsStore.selectModel(modelId)
+  showList.value = false
+}
+
+function removeRemoteModel(model: Model) {
+  pendingDeleteModel.value = model
+  showDeleteModal.value = true
+}
+
+async function confirmRemoveModel() {
+  const model = pendingDeleteModel.value
+  if (!model?.id) return
+  deleting.value = true
+  try {
+    await deleteModel(model.id)
+    await modelsStore.fetchModels()
+    showDeleteModal.value = false
+  } catch (e) {
+    modelsStore.error = e instanceof Error ? e.message : 'Failed to remove model'
+  } finally {
+    deleting.value = false
+    pendingDeleteModel.value = null
   }
 }
 </script>
@@ -166,6 +304,19 @@ async function startLoad(modelId: string) {
   text-overflow: ellipsis;
 }
 
+.model-type-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.model-type-icon.local {
+  color: var(--accent);
+}
+
+.model-type-icon.remote {
+  color: var(--success);
+}
+
 .placeholder {
   color: var(--text-secondary);
   font-size: 0.875rem;
@@ -185,6 +336,11 @@ async function startLoad(modelId: string) {
 .status-badge.loaded {
   background: rgba(16, 185, 129, 0.2);
   color: var(--success);
+}
+
+.status-badge.api {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
 }
 
 .status-badge.loading {
@@ -261,6 +417,21 @@ async function startLoad(modelId: string) {
   background: rgba(99, 102, 241, 0.1);
 }
 
+.model-item.remote:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.model-section-divider {
+  padding: 0.5rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
 .model-info {
   flex: 1;
   min-width: 0;
@@ -270,6 +441,9 @@ async function startLoad(modelId: string) {
   font-weight: 600;
   font-size: 0.875rem;
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .model-meta {
@@ -278,6 +452,38 @@ async function startLoad(modelId: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.model-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.delete-model-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.model-item:hover .delete-model-btn {
+  opacity: 1;
+}
+
+.delete-model-btn:hover {
+  color: var(--error, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .load-status {

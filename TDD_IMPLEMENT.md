@@ -6,7 +6,7 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 
 - **Backend**: FastAPI + aiosqlite + mlx-lm
 - **Frontend**: Vue 3 + Vite + Pinia + TypeScript
-- **Testing**: pytest (177 backend), Vitest (32 frontend), Playwright (14 E2E)
+- **Testing**: pytest (251 backend), Vitest (79 frontend)
 
 ---
 
@@ -42,6 +42,7 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 | Get session detail | ✅ | |
 | Update session | ✅ | |
 | Delete session | ✅ | |
+| Delete all sessions | ✅ | `test_sessions_api.py` (4) |
 | Add message (with duration_ms) | ✅ | |
 | Get messages | ✅ | |
 
@@ -73,7 +74,7 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 
 | Feature | Status | Tests |
 |---------|--------|-------|
-| List registered models | ✅ | `test_model_registry_api.py` (11) |
+| List registered models | ✅ | `test_model_registry_api.py` (16) |
 | Add new model | ✅ | |
 | Get model detail | ✅ | |
 | Update model info | ✅ | |
@@ -81,8 +82,22 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 | Validate model ID format | ✅ | |
 | Load model from registry | ✅ | |
 | Auto-detect local MLX models | ✅ | |
+| Remote model support | ✅ | `test_remote_model_e2e.py` (9) |
+| Model type routing (local/remote) | ✅ | |
 
-### 7. Usage Tracking (Backend API)
+### 7. Remote API Support
+
+| Feature | Status | Tests |
+|---------|--------|-------|
+| Remote API settings (base_url, api_key) | ✅ | `test_settings_api.py` (7) |
+| Remote model chat (httpx streaming) | ✅ | `test_remote_model_e2e.py` |
+| Remote API key validation | ✅ | |
+| Remote provider management | ✅ | |
+| Model type routing | ✅ | |
+| API key security (not exposed in GET) | ✅ | |
+| Base URL trailing slash handling | ✅ | |
+
+### 8. Usage Tracking (Backend API)
 
 | Feature | Status | Tests |
 |---------|--------|-------|
@@ -92,17 +107,17 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 | API key isolation | ✅ | |
 | Recent logs query | ✅ | |
 
-### 8. Settings & API Key Management (Backend API)
+### 9. Settings & API Key Management (Backend API)
 
 | Feature | Status | Tests |
 |---------|--------|-------|
-| Get/Update settings | ✅ | `test_settings_api.py` (13) |
+| Get/Update settings | ✅ | `test_settings_api.py` (21) |
 | List API keys | ✅ | |
 | Create API key | ✅ | |
 | Delete API key | ✅ | |
 | Key prefix display | ✅ | |
 
-### 9. Integration Tests
+### 10. Integration Tests
 
 | Feature | Status | Tests |
 |---------|--------|-------|
@@ -110,225 +125,156 @@ Apple Silicon MLX model chat API with OpenAI-compatible interface.
 | HTTP API chat test | ✅ | |
 | Stream/non-stream response | ✅ | |
 
-### 10. Frontend (Vue 3)
+### 11. Frontend (Vue 3)
 
 | Feature | Status | Tests |
 |---------|--------|-------|
 | Project setup (Vite + Vue 3 + TypeScript) | ✅ | ✅ `api.test.ts` |
 | Chat UI component | ✅ | ✅ `chat.test.ts` |
 | Session list sidebar (create/delete/rename) | ✅ | ✅ `session.ts` store |
-| Model selector dropdown + loading state | ✅ | ✅ `models.test.ts` |
+| Model selector dropdown (local/remote) | ✅ | ✅ `models.test.ts` |
 | SSE stream rendering | ✅ | ✅ `chat.test.ts` |
 | Pinia store for state management | ✅ | ✅ 3 store tests |
 | API Key input modal | ✅ | ✅ `api.test.ts` |
 | Models API & Store | ✅ | ✅ `models.test.ts` |
 | Settings page (API Key list) | ✅ | `ApiKeyList.vue` |
+| Remote API configuration UI | ✅ | `SettingsView.vue` |
+| Remote model add form | ✅ | `SettingsView.vue` |
+| Provider preset (OpenAI/OpenRouter/SiliconFlow) | ✅ | `SettingsView.vue` |
+| API Key validation button | ✅ | `SettingsView.vue` |
 | Dark/Light theme toggle | ✅ | `settings.ts` |
-| **会话历史消息加载** | ✅ | `session.ts` - `loadSessionMessages()` |
-| **实时生成进度 (token 计数、速度)** | ✅ | `ChatArea.vue`, `MessageBubble.vue` |
-| **生成耗时显示 (duration, TTFT)** | ✅ | `MessageBubble.vue` - duration badge |
-| **消息 Markdown 渲染** | ✅ | `MessageBubble.vue` - marked.js |
-| **Thinking process 折叠显示** | ✅ | `MessageBubble.vue` - thought 解析 |
-
-### 11. E2E Tests (Playwright)
-
-#### E2E 测试文件
-```
-tests/e2e/
-├── api.spec.ts              # 后端 API E2E (7 tests)
-├── chat.spec.ts             # 前端基础 UI E2E (7 tests)
-├── chat-flow.spec.ts        # 对话流程 + 模型选择 E2E (5 tests)
-├── prd-compliance.spec.ts   # PRD 合规测试 (16 tests, 9 skipped)
-└── api-key.spec.ts          # API Key 流程 E2E (9 tests)
-
-frontend/tests/e2e/
-└── api-key.spec.ts          # API Key 流程 (16 tests, 与上方部分重复)
-```
-
-#### E2E 覆盖率分析 (PRD 逐条对照)
-
-| PRD 章节 | 功能点 | 后端路由 | E2E 状态 | 说明 |
-|----------|--------|----------|----------|------|
-| 2.1.1 | 模型对话/流式输出 | POST /api/v1/chat | ✅ | chat-flow.spec.ts |
-| 2.1.1 | 实时 token 计数 | - | ✅ | chat-flow.spec.ts (streaming) |
-| 2.1.2 | 创建会话 | POST /sessions | ✅ | api.spec.ts, chat-flow.spec.ts |
-| 2.1.2 | 切换会话 | - | ✅ | prd-compliance.spec.ts |
-| 2.1.2 | 删除会话 | DELETE /sessions/{id} | ✅ | prd-compliance.spec.ts |
-| 2.1.2 | 会话历史保存 | GET /sessions/{id} | ✅ | prd-compliance.spec.ts |
-| 2.1.3 | 模型列表展示 | GET /api/v1/models | ✅ | api.spec.ts |
-| 2.1.3 | 切换模型 | POST /api/v1/models/load | ❌ | 缺失 E2E |
-| 2.1.3 | 加载状态显示 | - | ✅ | prd-compliance.spec.ts |
-| 2.1.4 | Temperature 调节 | PATCH /sessions/{id} | ❌ | 待实现 |
-| 2.1.4 | Max Tokens 调节 | PATCH /sessions/{id} | ❌ | 待实现 |
-| 2.1.4 | System Prompt | PATCH /sessions/{id} | ❌ | 待实现 |
-| 2.1.4 | 参数随会话保存 | - | ❌ | 待实现 |
-| 2.2.1 | API Key 生成 | POST /settings/api-keys | ❌ | 缺失 E2E |
-| 2.2.1 | API Key 删除 | DELETE /settings/api-keys/{id} | ❌ | 缺失 E2E |
-| 2.2.1 | API Key 列表 | GET /settings/api-keys | ❌ | 缺失 E2E |
-| 2.2.2 | /api/v1/ 前缀 | - | ✅ | prd-compliance.spec.ts |
-| 2.2.2 | /api/ → /api/v1/ 重定向 | - | ✅ | prd-compliance.spec.ts |
-| 2.2.4 | 用量统计 API | GET /usage | ✅ | prd-compliance.spec.ts |
-| 2.2.4 | 按时段查询 | GET /usage?period= | ✅ | prd-compliance.spec.ts |
-| 2.3.1 | OpenAI 兼容格式 | POST /v1/chat/completions | ✅ | api.spec.ts |
-| 2.3.1 | OpenAI 非流式 | POST /v1/chat/completions (stream=false) | ❌ | 缺失 E2E |
-| 2.3.1 | OpenAI 流式 | POST /v1/chat/completions (stream=true) | ❌ | 缺失 E2E |
-| 2.4.1 | 侧边栏会话列表 | - | ✅ | chat.spec.ts |
-| 2.4.1 | 聊天消息区域 | - | ✅ | chat.spec.ts |
-| 2.4.1 | 输入区域 | - | ✅ | chat.spec.ts |
-| 2.4.1 | 模型选择器 | - | ✅ | chat-flow.spec.ts |
-| 2.4.2 | Settings 页面加载 | - | ❌ | 缺失 E2E |
-| 2.4.2 | API Key 管理 UI | - | ❌ | 缺失 E2E |
-| 2.4.2 | 用量统计展示 UI | - | ❌ | 待实现 |
-| 2.4.2 | CORS 配置 UI | - | ❌ | 待实现 |
-| 2.4.3 | 深色主题 | - | ✅ | settings.ts store |
-| 2.4.3 | 浅色主题 | - | ✅ | settings.ts store |
-| - | Health 检查 | GET /health | ✅ | api.spec.ts |
-| - | 未授权访问拦截 | - | ✅ | api.spec.ts |
-| - | 会话重命名 | PATCH /sessions/{id} | ❌ | 缺失 E2E |
-| - | 历史消息加载 (UI) | GET /sessions/{id} | ✅ | session store |
-| - | duration_ms 显示 | - | ✅ | MessageBubble.vue |
-| - | TTFT 显示 | - | ✅ | MessageBubble.vue |
-
-#### 缺失 E2E 测试汇总
-
-**后端 API E2E 缺失 (需要真实 MLX 模型或 mock)**:
-| 缺失测试 | 优先级 | 原因 |
-|----------|--------|------|
-| POST /api/v1/models/load | 🟡 | 需要 MLX mock 或真实模型 |
-| GET /api/v1/models/current | 🟡 | 同上 |
-| GET /api/v1/settings | 🟡 | 简单 API，可直接测 |
-| PATCH /api/v1/settings | 🟡 | 同上 |
-| POST /api/v1/settings/api-keys | 🟡 | 创建 key 流程 |
-| DELETE /api/v1/settings/api-keys/{id} | 🟡 | 删除 key 流程 |
-| GET /api/v1/settings/api-keys | 🟡 | 列出 keys |
-| PATCH /sessions/{id} (rename) | 🟡 | 更新会话 |
-| POST /v1/chat/completions non-stream | 🟡 | 需要 MLX mock |
-| POST /v1/chat/completions stream | 🟡 | 需要 MLX mock |
-
-**前端 UI E2E 缺失**:
-| 缺失测试 | 优先级 | 原因 |
-|----------|--------|------|
-| Settings 页面 /settings 加载 | 🟡 | Vue router |
-| Settings API Key 列表展示 | 🟡 | ApiKeyList 组件 |
-| Settings 创建 API Key | 🟡 | ApiKeyList 组件 |
-| Settings 删除 API Key | 🟡 | ApiKeyList 组件 |
-| 会话重命名 (UI) | 🟡 | SessionList rename |
-| 会话详情 + 历史消息加载 | 🟡 | 已有后端测试，前端需 E2E |
-| 参数调节面板 | 🔴 | 待实现 ParameterPanel |
-| 参数持久化到会话 | 🔴 | 待实现 |
-| 用量统计展示 | 🟡 | 待实现 UsageStats |
-
-> 当前 E2E 总计约 **50+ tests** (含重复)，实际独立场景约 **35 个**，PRD 共 **37 个功能点**，覆盖率约 **~65%**。
+| 会话历史消息加载 | ✅ | `session.ts` - `loadSessionMessages()` |
+| 实时生成进度 (token 计数、速度) | ✅ | `ChatArea.vue`, `MessageBubble.vue` |
+| 生成耗时显示 (duration, TTFT) | ✅ | `MessageBubble.vue` - duration badge |
+| 消息 Markdown 渲染 | ✅ | `MessageBubble.vue` - marked.js |
+| Thinking process 折叠显示 | ✅ | `MessageBubble.vue` - thought 解析 |
+| 一键清理所有 Sessions | ✅ | `SessionList.vue` - clear all button |
+| 参数调节面板 | ✅ | `ParameterPanel.vue` |
+| 用量统计展示 UI | ✅ | `UsageStats.vue` - 4-stat grid + period filter |
+| CORS 配置界面 | ✅ | `SettingsView.vue` CORS section |
 
 ---
 
-## Pending Features 🚧 (from PRD Analysis 2026-04-10)
+## Pending Features 🚧
 
-> 以下基于 PRD (`MLX_Chat_Web_UI_PRD.md`) 与当前代码的全面对比得出。
+### Priority 1 - 知识库导出 🔴
 
-### Priority 1 - 关键功能缺失 🔴
+> 需求文档: `REQUIREMENTS.md`
 
-#### 1.1 参数调节面板
+将 Session 对话历史总结为知识库文件，用户选择模板和语言后导出 `.md` 文件下载。
 
-| 项目 | 说明 |
-|------|------|
-| 状态 | ❌ 未实现 |
-| 期望 | PRD 2.1.4 要求: Temperature 滑块 (0.0-2.0), Max Tokens 输入框 (1-8192), System Prompt 文本框 |
-| 后端 | ✅ `PATCH /api/v1/sessions/{id}` 已支持 |
-| 前端 | ❌ 缺少 `components/ParameterPanel.vue` |
-| 优先级 | **高** |
+#### 1.1 后端 - 模板管理
 
-#### 1.2 参数随会话保存
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| 数据库迁移: `export_templates` 表 | ✅ | id, name, description, language, template_content, system_prompt, is_builtin, created_at, updated_at |
+| 预置 4 个模板初始化 | ✅ | 学习笔记、会议纪要、技术文档、知识卡片 |
+| ExportTemplateService | ✅ | 模板 CRUD service |
+| GET /api/v1/export/templates | ✅ | 获取模板列表 (预置 + 用户自定义) |
+| POST /api/v1/export/templates | ✅ | 创建自定义模板 |
+| GET /api/v1/export/templates/{id} | ✅ | 获取模板详情 |
+| PATCH /api/v1/export/templates/{id} | ✅ | 更新自定义模板 |
+| DELETE /api/v1/export/templates/{id} | ✅ | 删除自定义模板 (预置不可删) |
+| 后端测试: 模板 CRUD API | ✅ | `test_export_templates_api.py` (20 tests) |
+| 后端测试: 预置模板初始化 | ✅ | 包含在 test_export_templates_api.py |
 
-| 项目 | 说明 |
-|------|------|
-| 状态 | ❌ 未实现 |
-| 期望 | 调节参数后保存到 session 的 temperature/max_tokens/system_prompt 字段，切换会话自动恢复 |
-| 涉及文件 | `stores/session.ts`, `api/sessions.ts`, `ParameterPanel.vue` |
-| 优先级 | **高** |
+#### 1.2 后端 - 导出生成
 
-#### 1.3 用量统计展示
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| POST /sessions/{id}/export/estimate | ✅ | 预估 token 数，远程模型提示 |
+| POST /sessions/{id}/export | ✅ | SSE 流式生成 |
+| Prompt 构建: 对话 + 模板 system_prompt + 语言指令 | ✅ | |
+| 客户端断开连接时中断生成 | ✅ | GeneratorExit 处理 |
+| 后端测试: 预估 API | ✅ | `test_export_api.py` |
+| 后端测试: 导出 API (mock 模型) | ✅ | 11 tests |
 
-| 项目 | 说明 |
-|------|------|
-| 状态 | ❌ 前端未实现 |
-| 后端 | ✅ `/api/v1/usage` 完整 |
-| 期望 | Settings 页面展示: 请求次数、输入 Token 数、输出 Token 数、总耗时 |
-| 涉及文件 | `views/SettingsView.vue`, 新增 `components/UsageStats.vue` |
-| 优先级 | **中** |
+#### 1.3 前端 - 导出 UI
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| Session 操作菜单添加 "导出知识库" 按钮 | ✅ | `SessionList.vue` |
+| 导出 Modal: 模板选择 + 语言选择 | ✅ | `ExportModal.vue` |
+| 预估 token 显示 + 远程模型费用提示 | ✅ | |
+| 流式内容预览 + 取消按钮 | ✅ | |
+| 生成完成后自动下载 .md 文件 | ✅ | `Blob` + `URL.createObjectURL` |
+| 失败错误展示 + 重试按钮 | ✅ | |
+| 前端 API: getExportTemplates, estimateExport, exportSession | ✅ | `api/export.ts` |
+
+#### 1.4 前端 - 模板管理
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| Settings 页面添加 "导出模板" 区域 | ✅ | `SettingsView.vue` |
+| 自定义模板创建/编辑/删除 UI | ✅ | 展开/折叠卡片 |
+| 模板编辑器 (markdown 输入 + 占位符说明) | ✅ | `TemplateEditor.vue` |
+| 提供模板示例帮助用户理解 | ✅ | Placeholder Reference 区域 |
+| 前端 API: 模板 CRUD | ⬜ | `api/export.ts` |
+| 前端测试: 模板管理组件 | ⬜ | |
 
 ### Priority 2 - 功能增强 🟡
 
-#### 2.1 API 版本重定向
-
-| 项目 | 说明 |
-|------|------|
-| 状态 | ❌ 未实现 |
-| 期望 | PRD 2.2.2 要求 `/api/` 重定向到 `/api/v1/`，保留旧版本兼容性 |
-| 涉及文件 | `backend/main.py` |
-| 优先级 | **中** |
-
-#### 2.2 CORS 配置界面
-
-| 项目 | 说明 |
-|------|------|
-| 状态 | ❌ 前端未实现 |
-| 后端 | ✅ `PATCH /api/v1/settings` 已支持 |
-| 期望 | Settings 页面增加 CORS 白名单编辑组件 |
-| 涉及文件 | `views/SettingsView.vue`, 新增 `components/CorsConfig.vue` |
-| 优先级 | **中** |
-
-#### 2.3 Chrome 插件接入文档
-
-| 项目 | 说明 |
-|------|------|
-| 状态 | ❌ 未编写 |
-| 期望 | PRD 第 9 章预留的插件接入指南: PluginConfig 接口、API 兼容性说明 |
-| 涉及文件 | `README.md` 或新增 `docs/chrome-extension.md` |
-| 优先级 | **低** |
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| API 版本重定向 `/api/` → `/api/v1/` | ✅ | `backend/main.py` |
+| CORS 配置界面 | ✅ | `views/SettingsView.vue` CORS section |
+| 用量统计展示 UI | ✅ | `components/UsageStats.vue` + `SettingsView.vue` |
+| Chrome 插件接入文档 | ⬜ | `docs/chrome-extension.md` |
 
 ---
 
-## Development Roadmap (开发路线)
+## Development Roadmap (TDD)
 
-按优先级排序的 TODO 列表，供后续 TDD 开发使用:
+### Phase 1 - 知识库导出: 模板管理后端 🔴
 
-### TODO 1 - 参数调节面板 🔴
-- [ ] 前端: 新增 `components/ParameterPanel.vue`
-- [ ] 前端: Temperature 滑块 (0.0-2.0, step 0.1, default 0.7)
-- [ ] 前端: Max Tokens 输入框 (1-8192, default 4096)
-- [ ] 前端: System Prompt 文本框 (多行)
-- [ ] 前端: `views/ChatView.vue` - 集成折叠面板
-- [ ] 前端: 编写 ParameterPanel 组件测试
-- [ ] E2E: 参数调节并发送消息验证参数生效
+**TDD 流程: 先写测试，再实现**
 
-### TODO 2 - 参数会话持久化 🔴
-- [ ] 前端: ParameterPanel 监听 session 切换，加载对应参数值
-- [ ] 前端: 发送消息时从当前 session 读取参数传给 chat API
-- [ ] 前端: 参数变更自动保存 (debounce 500ms)
-- [ ] 前端: 编写参数持久化测试
-- [ ] E2E: 验证切换会话后参数恢复
+- [x] 测试: 创建 `test_export_templates_api.py`，编写模板 CRUD 测试 (20 tests)
+- [x] 测试: 预置模板初始化测试
+- [x] 实现: 数据库迁移 - `export_templates` 表
+- [x] 实现: `ExportTemplateService` - CRUD + 初始化
+- [x] 实现: `routers/export.py` - 模板 CRUD API
+- [x] 实现: `main.py` - 路由注册 + 初始化
+- [x] 验证: `python -m pytest backend/tests/api/test_export_templates_api.py -v`
 
-### TODO 3 - 用量统计展示 🟡
-- [ ] 前端: 新增 `components/UsageStats.vue`
-- [ ] 前端: 调用 `api/settings.ts` 的 `getUsage()`
-- [ ] 前端: `views/SettingsView.vue` 集成 UsageStats 组件
-- [ ] 前端: 显示请求次数、input/output tokens、总耗时
-- [ ] 前端: 编写 UsageStats 组件测试
+### Phase 2 - 知识库导出: 导出生成后端 🔴
 
-### TODO 4 - API 版本重定向 🟡
-- [ ] 后端: `main.py` - 添加 `/api/` -> `/api/v1/` 重定向
-- [ ] 后端: 编写重定向测试
+- [x] 测试: 创建 `test_export_api.py`，编写导出 API 测试 (mock 模型)
+- [x] 测试: 预估 token API 测试
+- [x] 测试: SSE 流式响应测试
+- [x] 测试: 语言参数测试
+- [x] 实现: `POST /sessions/{id}/export/estimate` - 预估
+- [x] 实现: `POST /sessions/{id}/export` - SSE 流式生成
+- [x] 实现: Prompt 构建 (对话 + 模板 + 语言)
+- [x] 实现: 客户端断开中断处理
+- [x] 验证: `python -m pytest backend/tests/api/test_export_api.py -v`
 
-### TODO 5 - CORS 配置界面 🟡
-- [ ] 前端: 新增 `components/CorsConfig.vue`
-- [ ] 前端: `views/SettingsView.vue` 集成 CORS 配置
-- [ ] 前端: 编写 CorsConfig 组件测试
+### Phase 3 - 知识库导出: 前端 UI 🟡
 
-### TODO 6 - Chrome 插件文档 🟢
-- [ ] 编写插件接入指南文档
-- [ ] 包含 PluginConfig 接口定义
-- [ ] 包含 API 兼容性说明
+- [x] 实现: `api/export.ts` - 导出相关 API
+- [x] 实现: `ExportModal.vue` - 模板选择 + 语言 + 预览
+- [x] 实现: `SessionList.vue` - 添加导出按钮
+- [x] 实现: 流式预览 + 取消 + 下载
+- [x] 实现: 错误展示 + 重试
+- [ ] 测试: `ExportModal.vue` 组件测试
+- [x] 验证: `cd frontend && npm run test -- --run`
+- [x] 验证: `cd frontend && npm run build`
+
+### Phase 4 - 知识库导出: 模板管理前端 🟡
+
+- [x] 实现: `TemplateEditor.vue` - 模板编辑器
+- [x] 实现: `SettingsView.vue` - 模板管理区域
+- [x] 实现: 模板示例展示 (Placeholder Reference)
+- [ ] 测试: 模板管理组件测试
+- [x] 验证: `cd frontend && npm run test -- --run`
+- [x] 验证: `cd frontend && npm run build`
+
+### Phase 5 - 功能增强 🟡
+
+- [x] API 版本重定向 (`/api/` → `/api/v1/`)
+- [x] CORS 配置界面 (SettingsView.vue CORS section with add/remove/save)
+- [x] 用量统计 UI (UsageStats.vue component in SettingsView)
+- [ ] Chrome 插件文档
 
 ---
 
@@ -344,19 +290,21 @@ backend/
 │   ├── api_key.py             # API Key 生成/验证 (SHA256)
 │   └── dependencies.py        # FastAPI 认证依赖
 ├── routers/
-│   ├── chat.py                # POST /api/v1/chat (SSE, TTFT, duration)
-│   ├── sessions.py            # CRUD /api/v1/sessions
+│   ├── chat.py                # POST /api/v1/chat (SSE, TTFT, local/remote routing)
+│   ├── sessions.py            # CRUD /api/v1/sessions + delete all
 │   ├── models.py              # /api/v1/models (list/load/current)
-│   ├── model_registry.py      # /api/v1/model-registry
+│   ├── model_registry.py      # /api/v1/model-registry (local + remote)
 │   ├── usage.py               # GET /api/v1/usage
-│   ├── settings.py            # /api/v1/settings + /api-keys
-│   └── openai.py              # /v1/chat/completions (OpenAI compat)
+│   ├── settings.py            # /api/v1/settings + /api-keys + /remote + /remote/providers
+│   ├── openai.py              # /v1/chat/completions (OpenAI compat)
+│   └── export.py              # /api/v1/export/templates + /sessions/{id}/export ⬜
 ├── services/
 │   ├── mlx_service.py         # MLX model inference
-│   ├── session_service.py     # Session CRUD + messages + duration
+│   ├── session_service.py     # Session CRUD + messages + duration + delete all
 │   ├── usage_service.py       # Usage recording/query
 │   ├── auth_service.py        # API Key management
-│   └── model_registry_service.py
+│   ├── model_registry_service.py  # Model registry (local + remote + provider)
+│   └── export_template_service.py # Export template CRUD ⬜
 └── utils/
     └── model_detector.py      # Local model auto-detection
 ```
@@ -367,25 +315,29 @@ frontend/src/
 ├── api/
 │   ├── auth.ts                # API Key localStorage 管理
 │   ├── chat.ts                # streamingChat (SSE parse, TTFT, duration)
-│   ├── sessions.ts            # Session CRUD API
-│   ├── models.ts              # Models API
-│   └── settings.ts            # Settings + API Keys + Usage API
+│   ├── sessions.ts            # Session CRUD + deleteAllSessions API
+│   ├── models.ts              # Models API + addRemoteModel
+│   ├── settings.ts            # Settings + API Keys + Usage + Remote + Validate API
+│   └── export.ts              # Export templates + generate API ✅
 ├── stores/
 │   ├── chat.ts                # Chat state (messages, isGenerating, tokenCount, duration)
-│   ├── session.ts             # Session state + loadSessionMessages()
-│   ├── models.ts              # Models state (models, loadedModelId)
+│   ├── session.ts             # Session state + loadSessionMessages() + deleteAll
+│   ├── models.ts              # Models state (models, loadedModelId, local/remote)
 │   └── settings.ts            # Settings state (apiKeys, theme)
 ├── components/
 │   ├── ChatArea.vue           # 消息列表 + 实时进度
 │   ├── MessageBubble.vue      # 消息气泡 + duration badge + thought 解析 + Markdown
 │   ├── InputArea.vue          # 输入框 + 发送按钮
-│   ├── SessionList.vue        # 会话列表 + 新建/删除/重命名
-│   ├── ModelSelector.vue      # 模型下拉 + 加载状态
+│   ├── SessionList.vue        # 会话列表 + 新建/删除/重命名/清理全部/导出按钮
+│   ├── ModelSelector.vue      # 模型下拉 (本地🖥️ + 远程☁️) + 加载状态
+│   ├── ParameterPanel.vue     # 参数调节面板
 │   ├── ApiKeyList.vue         # API Key 列表 + 创建/删除
-│   └── Modal.vue              # 通用模态框
+│   ├── Modal.vue              # 通用模态框
+│   ├── ExportModal.vue        # 导出知识库弹窗 (模板/语言选择) ✅
+│   └── TemplateEditor.vue     # 自定义模板编辑器 ✅
 └── views/
     ├── ChatView.vue           # 主界面 (sidebar + chat area)
-    └── SettingsView.vue       # 设置页面 (API Key + Theme)
+    └── SettingsView.vue       # 设置页面 (API Key + Remote API + Templates + Theme)
 ```
 
 ---
@@ -395,7 +347,7 @@ frontend/src/
 ### Backend Tests (pytest)
 ```
 backend/tests/
-├── conftest.py              # Fixtures (db, API keys, services)
+├── conftest.py              # Fixtures (db, API keys, services, remote_providers table)
 ├── unit/                    # Unit tests
 │   ├── test_api_key.py
 │   ├── test_auth_service.py
@@ -405,13 +357,17 @@ backend/tests/
 │   └── test_usage_service.py
 ├── api/                     # API tests
 │   ├── test_chat_api.py
-│   ├── test_chat_duration.py    # Duration + TTFT tests
-│   ├── test_sessions_api.py
+│   ├── test_chat_duration.py
+│   ├── test_sessions_api.py         # 22 tests (含 delete all)
 │   ├── test_models_api.py
-│   ├── test_model_registry_api.py
+│   ├── test_model_registry_api.py   # 16 tests (含 remote model)
 │   ├── test_openai_api.py
-│   ├── test_settings_api.py
-│   └── test_usage_api.py
+│   ├── test_settings_api.py         # 21 tests (含 remote settings + validate)
+│   ├── test_remote_model_e2e.py     # 9 tests (remote E2E)
+│   ├── test_usage_api.py
+│   ├── test_export_templates_api.py # ✅ 模板 CRUD 测试 (20 tests)
+│   ├── test_export_api.py           # ✅ 导出生成测试 (11 tests)
+│   └── test_e2e_api.py              # ✅ E2E API 测试 (16 tests)
 └── integration/             # Integration tests (run separately)
     ├── test_http_api.py
     ├── test_mlx_direct.py
@@ -424,22 +380,13 @@ frontend/src/
 ├── api/
 │   ├── api.test.ts          # Sessions & Settings & Chat API (11 tests)
 │   └── models.test.ts       # Models API (5 tests)
-└── stores/
-    ├── chat.test.ts          # Chat store (9 tests)
-    └── models.test.ts        # Models store (7 tests)
-```
-
-### E2E Tests (Playwright)
-```
-tests/e2e/
-├── api.spec.ts              # Backend API E2E (7 tests)
-├── chat.spec.ts             # Frontend page load E2E (7 tests)
-├── chat-flow.spec.ts        # Chat flow + model selector (5 tests)
-├── prd-compliance.spec.ts   # PRD compliance (16 tests, 9 skipped)
-└── api-key.spec.ts          # API Key flow (9 tests)
-
-frontend/tests/e2e/
-└── api-key.spec.ts          # API Key flow (16 tests, duplicate)
+├── stores/
+│   ├── chat.test.ts          # Chat store (9 tests)
+│   ├── models.test.ts        # Models store (7 tests)
+│   └── session.test.ts       # Session store (6 tests)
+├── components/
+│   ├── ParameterPanel.test.ts # ParameterPanel (15 tests)
+│   └── e2e.test.ts            # ✅ ExportModal + TemplateEditor (26 tests)
 ```
 
 ---
@@ -457,16 +404,6 @@ npm run test -- --run
 
 # Frontend build
 npm run build
-
-# E2E tests (requires backend and frontend running)
-# Terminal 1: Start backend
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
-
-# Terminal 2: Start frontend
-cd frontend && npm run dev
-
-# Terminal 3: Run E2E tests
-npm run test:e2e
 ```
 
 ---
@@ -482,4 +419,4 @@ npm run test:e2e
 
 ---
 
-Last Updated: 2026-04-10 (E2E coverage analysis added)
+Last Updated: 2026-04-11 (Phase 5 功能增强: API 重定向、用量统计 UI、CORS 配置界面)

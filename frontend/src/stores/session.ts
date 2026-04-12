@@ -6,8 +6,9 @@
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { listSessions, createSession, deleteSession, getSession, updateSession } from '@/api/sessions'
+import { listSessions, createSession, deleteSession, deleteAllSessions as deleteAllSessionsApi, getSession, updateSession } from '@/api/sessions'
 import { useChatStore } from './chat'
+import { useModelsStore } from './models'
 
 export interface Session {
   id: string
@@ -41,7 +42,7 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function createNewSession(params: { name?: string } = {}) {
+  async function createNewSession(params: { name?: string; model?: string } = {}) {
     loading.value = true
     error.value = null
 
@@ -72,6 +73,29 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function deleteAllSessions() {
+    loading.value = true
+    error.value = null
+
+    try {
+      const result = await deleteAllSessionsApi()
+      sessions.value = []
+      currentSessionId.value = null
+
+      // Clear chat store
+      const chatStore = useChatStore()
+      chatStore.clearMessages()
+      chatStore.setCurrentSession('')
+
+      return result
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to delete all sessions'
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function selectSession(id: string) {
     currentSessionId.value = id
     await loadSessionMessages(id)
@@ -85,7 +109,6 @@ export const useSessionStore = defineStore('session', () => {
     try {
       const sessionData = await getSession(sessionId)
       if (sessionData && sessionData.messages) {
-        // 将 API 返回的消息转换为 chat store 格式
         const messages = sessionData.messages.map((m: any) => ({
           id: m.id,
           role: m.role,
@@ -94,6 +117,15 @@ export const useSessionStore = defineStore('session', () => {
           duration_ms: m.duration_ms
         }))
         chatStore.setMessages(messages)
+      }
+
+      // Restore model selection from session
+      if (sessionData?.model && sessionData.model !== 'default') {
+        const modelsStore = useModelsStore()
+        const model = modelsStore.models.find(m => m.model_id === sessionData.model)
+        if (model) {
+          modelsStore.selectModel(model.model_id)
+        }
       }
     } catch (e) {
       console.error('Failed to load session messages:', e)
@@ -134,6 +166,7 @@ export const useSessionStore = defineStore('session', () => {
     fetchSessions,
     createSession: createNewSession,
     deleteSession: deleteSessionById,
+    deleteAllSessions,
     selectSession,
     updateSession: updateSessionById,
     getCurrentSession,

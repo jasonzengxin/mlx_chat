@@ -132,6 +132,31 @@ class SessionService:
 
         return result.rowcount > 0
 
+    async def delete_all_sessions(self, api_key_id: str) -> int:
+        """
+        删除指定 API Key 的所有会话
+
+        Args:
+            api_key_id: API Key ID
+
+        Returns:
+            int: 删除的会话数量
+        """
+        # 先获取会话数量
+        count = await self.db.fetchval(
+            "SELECT COUNT(*) FROM sessions WHERE api_key_id = ?",
+            (api_key_id,)
+        )
+
+        # 删除所有会话 (消息会通过外键级联删除)
+        await self.db.execute(
+            "DELETE FROM sessions WHERE api_key_id = ?",
+            (api_key_id,)
+        )
+        await self.db.commit()
+
+        return count
+
     async def add_message(
         self,
         session_id: str,

@@ -235,3 +235,81 @@ class TestSessionsAPI:
         response = await api_client.delete(f"/api/v1/sessions/{db_with_session.id}")
 
         assert response.status_code == 401
+
+
+class TestDeleteAllSessions:
+    """删除所有会话测试"""
+
+    @pytest.mark.asyncio
+    async def test_delete_all_sessions_requires_auth(self, api_client):
+        """测试删除所有会话需要认证"""
+        response = await api_client.delete("/api/v1/sessions")
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_delete_all_sessions_success(self, api_client, db_with_api_key, db_with_sessions):
+        """测试成功删除所有会话"""
+        response = await api_client.delete(
+            "/api/v1/sessions",
+            headers={"Authorization": f"Bearer {db_with_api_key.key}"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "deleted_count" in data
+        assert data["deleted_count"] == 3
+
+        # 验证所有会话已删除
+        list_response = await api_client.get(
+            "/api/v1/sessions",
+            headers={"Authorization": f"Bearer {db_with_api_key.key}"}
+        )
+        assert list_response.json() == []
+
+    @pytest.mark.asyncio
+    async def test_delete_all_sessions_empty(self, api_client, db_with_api_key):
+        """测试删除空会话列表"""
+        response = await api_client.delete(
+            "/api/v1/sessions",
+            headers={"Authorization": f"Bearer {db_with_api_key.key}"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["deleted_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_delete_all_sessions_isolated(self, api_client, db_with_two_api_keys):
+        """测试删除会话不影响其他用户的会话"""
+        # 用第一个 key 创建会话
+        await api_client.post(
+            "/api/v1/sessions",
+            headers={"Authorization": f"Bearer {db_with_two_api_keys[0].key}"},
+            json={"name": "User 1 Session"}
+        )
+
+        # 用第二个 key 创建会话
+        await api_client.post(
+            "/api/v1/sessions",
+            headers={"Authorization": f"Bearer {db_with_two_api_keys[1].key}"},
+            json={"name": "User 2 Session"}
+        )
+
+        # 第一个用户删除所有会话
+        response = await api_client.delete(
+            "/api/v1/sessions",
+            headers={"Authorization": f"Bearer {db_with_two_api_keys[0].key}"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["deleted_count"] == 1
+
+        # 第二个用户的会话仍然存在
+        list_response = await api_client.get(
+            "/api/v1/sessions",
+            headers={"Authorization": f"Bearer {db_with_two_api_keys[1].key}"}
+        )
+        sessions = list_response.json()
+        assert len(sessions) == 1
+        assert sessions[0]["name"] == "User 2 Session"

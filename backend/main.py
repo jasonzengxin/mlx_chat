@@ -15,10 +15,11 @@ import aiosqlite
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import chat, sessions, models, usage, settings, openai, model_registry
+from backend.routers import chat, sessions, models, usage, settings, openai, model_registry, export
 from backend.database import Database
 from backend.mlx_instance import init_mlx_service
 from backend.services.model_registry_service import ModelRegistryService
+from backend.services.export_template_service import ExportTemplateService
 from backend.utils.model_detector import detect_local_models
 
 
@@ -98,9 +99,34 @@ async def get_database() -> Database:
             is_active BOOLEAN DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS remote_providers (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            provider_type TEXT DEFAULT 'custom',
+            base_url TEXT DEFAULT '',
+            api_key TEXT DEFAULT '',
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS export_templates (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            language TEXT DEFAULT 'both',
+            template_content TEXT NOT NULL,
+            system_prompt TEXT NOT NULL,
+            is_builtin BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
     ''')
     await _ensure_column(conn, "messages", "duration_ms", "INTEGER")
     await _ensure_column(conn, "sessions", "context_messages", "INTEGER DEFAULT 20")
+    await _ensure_column(conn, "supported_models", "model_type", "TEXT DEFAULT 'local'")
+    await _ensure_column(conn, "supported_models", "endpoint", "TEXT DEFAULT ''")
+    await _ensure_column(conn, "supported_models", "remote_provider", "TEXT DEFAULT ''")
+    await _ensure_column(conn, "supported_models", "remote_base_url", "TEXT DEFAULT ''")
+    await _ensure_column(conn, "supported_models", "remote_api_key", "TEXT DEFAULT ''")
     await conn.commit()
 
     return Database(conn)
@@ -123,6 +149,11 @@ async def lifespan(app: FastAPI):
 
     # 检测本地模型，自动注册未在数据库中的模型
     await _auto_register_local_models(registry)
+
+    # 初始化导出模板服务
+    export_service = ExportTemplateService(app.state.db)
+    await export_service.initialize()
+    app.state.export_template_service = export_service
 
     yield
 
@@ -201,7 +232,14 @@ def create_app(db: Optional[Database] = None) -> FastAPI:
     app.include_router(usage.router, prefix="/api/v1/usage", tags=["Usage"])
     app.include_router(settings.router, prefix="/api/v1/settings", tags=["Settings"])
     app.include_router(model_registry.router, prefix="/api/v1/model-registry", tags=["Model Registry"])
+    app.include_router(export.router, prefix="/api/v1/export", tags=["Export"])
     app.include_router(openai.router, prefix="/v1", tags=["OpenAI"])  # OpenAI 兼容端点
+
+    # API 版本重定向 /api/ -> /api/v1/
+    @app.get("/api/", include_in_schema=False)
+    async def api_root_redirect():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/api/v1/", status_code=301)
 
     # 健康检查
     @app.get("/health")

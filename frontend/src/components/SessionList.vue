@@ -5,11 +5,19 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
         <span>New Chat</span>
       </button>
+      <button
+        v-if="sessions.length > 0"
+        class="clear-all-btn"
+        @click="showClearAllModal = true"
+        title="Clear all sessions"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+      </button>
     </div>
-    
+
     <div class="sessions-container">
-      <div 
-        v-for="session in sessions" 
+      <div
+        v-for="session in sessions"
         :key="session.id"
         class="session-item"
         :class="{ active: session.id === currentSessionId }"
@@ -21,7 +29,7 @@
         <div class="session-name" v-if="editingId !== session.id">
           {{ session.name }}
         </div>
-        <input 
+        <input
           v-else
           ref="editInput"
           v-model="editName"
@@ -30,10 +38,13 @@
           @keydown.enter="saveName(session.id)"
           @click.stop
         />
-        
+
         <div class="actions" v-if="editingId !== session.id">
           <button class="action-btn" @click.stop="startEdit(session)" title="Rename">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          </button>
+          <button class="action-btn" @click.stop="showExportModal(session)" title="Export as Knowledge Base">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
           </button>
           <button class="action-btn delete" @click.stop="confirmDelete(session.id)" title="Delete">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
@@ -42,15 +53,33 @@
       </div>
     </div>
 
-    <Modal 
-      :show="showDeleteModal" 
-      title="Delete Session" 
+    <Modal
+      :show="showDeleteModal"
+      title="Delete Session"
       confirmText="Delete"
       @close="showDeleteModal = false"
       @confirm="handleDelete"
     >
       <p>Are you sure you want to delete this chat session?</p>
     </Modal>
+
+    <Modal
+      :show="showClearAllModal"
+      title="Clear All Sessions"
+      confirmText="Clear All"
+      @close="showClearAllModal = false"
+      @confirm="handleClearAll"
+    >
+      <p>Are you sure you want to delete <strong>all {{ sessions.length }} sessions</strong>?</p>
+      <p class="warning">This action cannot be undone.</p>
+    </Modal>
+
+    <ExportModal
+      :show="showExportModalFlag"
+      :sessionId="exportSessionId || ''"
+      :sessionName="exportSessionName || ''"
+      @close="showExportModalFlag = false"
+    />
 
     <div v-if="error" class="error-msg">{{ error }}</div>
   </div>
@@ -59,9 +88,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useSessionStore } from '@/stores/session'
+import { useModelsStore } from '@/stores/models'
 import Modal from './Modal.vue'
+import ExportModal from './ExportModal.vue'
 
 const store = useSessionStore()
+const modelsStore = useModelsStore()
 
 const sessions = computed(() => store.sessions)
 const currentSessionId = computed(() => store.currentSessionId)
@@ -71,7 +103,11 @@ const editingId = ref<string | null>(null)
 const editName = ref('')
 const editInput = ref<HTMLInputElement | null>(null)
 const showDeleteModal = ref(false)
+const showClearAllModal = ref(false)
 const sessionToDelete = ref<string | null>(null)
+const showExportModalFlag = ref(false)
+const exportSessionId = ref<string | null>(null)
+const exportSessionName = ref<string | null>(null)
 
 onMounted(async () => {
   await store.fetchSessions()
@@ -81,7 +117,10 @@ onMounted(async () => {
 })
 
 async function createNewSession() {
-  await store.createSession({ name: 'New Chat' })
+  await store.createSession({
+    name: 'New Chat',
+    model: modelsStore.loadedModelId || undefined,
+  })
 }
 
 function selectSession(id: string) {
@@ -101,6 +140,11 @@ async function handleDelete() {
   }
 }
 
+async function handleClearAll() {
+  await store.deleteAllSessions()
+  showClearAllModal.value = false
+}
+
 function startEdit(session: any) {
   editingId.value = session.id
   editName.value = session.name
@@ -111,13 +155,19 @@ function startEdit(session: any) {
 
 async function saveName(id: string) {
   if (!editingId.value) return
-  
+
   const name = editName.value.trim()
   if (name && name !== sessions.value.find(s => s.id === id)?.name) {
     await store.updateSession(id, { name })
   }
-  
+
   editingId.value = null
+}
+
+function showExportModal(session: any) {
+  exportSessionId.value = session.id
+  exportSessionName.value = session.name
+  showExportModalFlag.value = true
 }
 </script>
 
@@ -130,10 +180,12 @@ async function saveName(id: string) {
 
 .list-header {
   padding: 0 1.5rem 1rem;
+  display: flex;
+  gap: 0.5rem;
 }
 
 .new-chat-btn {
-  width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -151,6 +203,25 @@ async function saveName(id: string) {
   border-style: solid;
   border-color: var(--accent);
   background: rgba(99, 102, 241, 0.05);
+}
+
+.clear-all-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-all-btn:hover {
+  border-color: var(--error);
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .sessions-container {
@@ -253,5 +324,11 @@ async function saveName(id: string) {
   padding: 1rem 1.5rem;
   color: var(--error);
   font-size: 0.75rem;
+}
+
+.warning {
+  color: var(--error);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
 }
 </style>
